@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package file;
+
+option go_package = "github.com/nnc/university-reports-creator/gen/go/file";
+
+import "google/protobuf/empty.proto";
+
+service FileService {
+  rpc Upload(UploadRequest) returns (UploadResponse);
+  rpc Download(DownloadRequest) returns (DownloadResponse);
+  rpc Delete(DeleteRequest) returns (google.protobuf.Empty);
+  rpc List(ListRequest) returns (ListResponse);
+}
+
+message UploadRequest {
+  string filename = 1;
+  string content_type = 2;
+  bytes data = 3;
+}
+
+message UploadResponse {
+  string id = 1;
+  string filename = 2;
+  int64 size = 3;
+}
+
+message DownloadRequest {
+  string id = 1;
+}
+
+message DownloadResponse {
+  string id = 1;
+  string filename = 2;
+  string content_type = 3;
+  bytes data = 4;
+}
+
+message DeleteRequest {
+  string id = 1;
+}
+
+message ListRequest {}
+
+message FileInfo {
+  string id = 1;
+  string filename = 2;
+  string content_type = 3;
+  int64 size = 4;
+}
+
+message ListResponse {
+  repeated FileInfo files = 1;
+}

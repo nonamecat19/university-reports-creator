@@ -5,13 +5,9 @@ managed:
     - file_option: go_package_prefix
       value: github.com/nnc/university-reports-creator/gen/go
 plugins:
-  - remote: buf.build/protocolbuffers/go
-    revision: 1
+  - local: protoc-gen-go
     out: gen/go
-    opt:
-      - paths=source_relative
-  - remote: buf.build/grpc/go
-    revision: 1
+  - local: protoc-gen-go-grpc
     out: gen/go
-    opt:
-      - paths=source_relative
+  - local: protoc-gen-connect-go
+    out: gen/go

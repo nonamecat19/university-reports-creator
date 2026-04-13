@@ -1,8 +1,9 @@
-go 1.25.0
+go 1.25.6
 
 use (
 	./service-auth
 	./service-document
+	./service-files
 	./service-gateway
 )
 

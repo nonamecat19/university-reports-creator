@@ -1,15 +1,18 @@
-.PHONY: help build build-auth build-document build-gateway generate run up down clean proto docker-build docker-up docker-down
+.PHONY: help build build-auth build-document build-files build-gateway generate run up down clean proto docker-build docker-up docker-down
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-build: build-auth build-document build-gateway ## Build all services
+build: build-auth build-document build-files build-gateway ## Build all services
 
 build-auth: ## Build service-auth
 	go work sync && CGO_ENABLED=0 go build -o dist/service-auth ./service-auth/cmd/server
 
 build-document: ## Build service-document
 	go work sync && CGO_ENABLED=0 go build -o dist/service-document ./service-document/cmd/server
+
+build-files: ## Build service-files
+	go work sync && CGO_ENABLED=0 go build -o dist/service-files ./service-files/cmd/server
 
 build-gateway: ## Build service-gateway
 	go work sync && CGO_ENABLED=0 go build -o dist/service-gateway ./service-gateway/cmd/server
@@ -24,6 +27,7 @@ generate: proto ## Generate protobuf and tidy modules
 run: build ## Run services locally (requires postgres and surrealdb)
 	./dist/service-auth &
 	./dist/service-document &
+	./dist/service-files &
 	./dist/service-gateway
 
 docker-build: ## Build Docker images

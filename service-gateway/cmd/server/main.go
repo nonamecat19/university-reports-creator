@@ -11,11 +11,14 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/rs/cors"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/nnc/university-reports-creator/gen/go/auth"
 	"github.com/nnc/university-reports-creator/gen/go/auth/authconnect"
 	"github.com/nnc/university-reports-creator/gen/go/document"
 	"github.com/nnc/university-reports-creator/gen/go/document/documentconnect"
+	"github.com/nnc/university-reports-creator/gen/go/file"
+	"github.com/nnc/university-reports-creator/gen/go/file/fileconnect"
 	"github.com/nnc/university-reports-creator/gen/go/template"
 	"github.com/nnc/university-reports-creator/gen/go/template/templateconnect"
 )
@@ -24,6 +27,7 @@ type Config struct {
 	HTTPPort  string `env:"HTTP_PORT" envDefault:":8080"`
 	AuthAddr  string `env:"AUTH_ADDR" envDefault:":50051"`
 	DocAddr   string `env:"DOC_ADDR" envDefault:":50052"`
+	FilesAddr string `env:"FILES_ADDR" envDefault:":50053"`
 	JWTSecret string `env:"JWT_SECRET" envDefault:"change-me"`
 }
 
@@ -39,6 +43,7 @@ func main() {
 		HTTPPort:  getEnv("HTTP_PORT", ":8080"),
 		AuthAddr:  getEnv("AUTH_ADDR", "localhost:50051"),
 		DocAddr:   getEnv("DOC_ADDR", "localhost:50052"),
+		FilesAddr: getEnv("FILES_ADDR", "localhost:50053"),
 		JWTSecret: getEnv("JWT_SECRET", "change-me"),
 	}
 
@@ -52,6 +57,9 @@ func main() {
 
 	tmplPath, tmplHandler := templateconnect.NewTemplateServiceHandler(&TemplateHandler{addr: cfg.DocAddr, jwtSecret: cfg.JWTSecret})
 	mux.Handle(tmplPath, tmplHandler)
+
+	filesPath, filesHandler := fileconnect.NewFileServiceHandler(&FileHandler{addr: cfg.FilesAddr, jwtSecret: cfg.JWTSecret})
+	mux.Handle(filesPath, filesHandler)
 
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins: []string{"http://localhost:3000"},
@@ -158,5 +166,30 @@ func (h *TemplateHandler) UpdateTemplate(ctx context.Context, req *connect.Reque
 }
 
 func (h *TemplateHandler) DeleteTemplate(ctx context.Context, req *connect.Request[template.DeleteTemplateRequest]) (*connect.Response[template.DeleteTemplateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("not implemented"))
+}
+
+type FileHandler struct {
+	addr      string
+	jwtSecret string
+}
+
+func (*FileHandler) ServiceName() string {
+	return "/file.FileService/"
+}
+
+func (h *FileHandler) Upload(ctx context.Context, req *connect.Request[file.UploadRequest]) (*connect.Response[file.UploadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("not implemented"))
+}
+
+func (h *FileHandler) Download(ctx context.Context, req *connect.Request[file.DownloadRequest]) (*connect.Response[file.DownloadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("not implemented"))
+}
+
+func (h *FileHandler) Delete(ctx context.Context, req *connect.Request[file.DeleteRequest]) (*connect.Response[emptypb.Empty], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("not implemented"))
+}
+
+func (h *FileHandler) List(ctx context.Context, req *connect.Request[file.ListRequest]) (*connect.Response[file.ListResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("not implemented"))
 }

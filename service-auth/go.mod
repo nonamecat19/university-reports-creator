@@ -30,4 +30,5 @@ require (
 )
 
 replace github.com/nnc/university-reports-creator/gen/go => ../gen/go
+
 replace github.com/nnc/university-reports-creator/pkg/shared => ../pkg/shared

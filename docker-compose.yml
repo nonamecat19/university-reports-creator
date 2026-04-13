@@ -40,6 +40,24 @@ services:
       timeout: 3s
       retries: 5
 
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   service-auth:
     build:
       context: .
@@ -77,6 +95,25 @@ services:
       surrealdb-health:
         condition: service_healthy
 
+  service-files:
+    build:
+      context: .
+      dockerfile: service-files/Dockerfile
+    container_name: service-files
+    restart: unless-stopped
+    environment:
+      GRPC_PORT: ":50053"
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: files
+      MINIO_USE_SSL: "false"
+    ports:
+      - "50053:50053"
+    depends_on:
+      minio:
+        condition: service_started
+
   service-gateway:
     build:
       context: .
@@ -87,13 +124,16 @@ services:
       HTTP_PORT: ":8080"
       AUTH_ADDR: service-auth:50051
       DOC_ADDR: service-document:50052
+      FILES_ADDR: service-files:50053
       JWT_SECRET: ${JWT_SECRET:-change-me-to-a-strong-secret}
     ports:
       - "8080:8080"
     depends_on:
       - service-auth
       - service-document
+      - service-files
 
 volumes:
   pgdata:
   surrealdb_data:
+  minio_data:
