@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	pb "github.com/nnc/university-reports-creator/service-document/gen/template"
+	pb "github.com/nnc/university-reports-creator/gen/go/template"
 	"github.com/nnc/university-reports-creator/service-document/internal/repository"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

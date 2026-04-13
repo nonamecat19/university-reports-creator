@@ -2,12 +2,10 @@ package config
 
 import (
 	"github.com/caarlos0/env/v11"
-)
+	"github.com/joho/godotenv"
 
-type Config struct {
-	GRPCPort  string `env:"GRPC_PORT" envDefault:":50052"`
-	SurrealDB SurrealDBConfig
-}
+	"github.com/nnc/university-reports-creator/pkg/shared/config"
+)
 
 type SurrealDBConfig struct {
 	URL       string `env:"SURREALDB_URL" envDefault:"ws://localhost:8000"`
@@ -17,7 +15,13 @@ type SurrealDBConfig struct {
 	Database  string `env:"SURREALDB_DATABASE" envDefault:"main"`
 }
 
+type Config struct {
+	config.BaseConfig
+	SurrealDB SurrealDBConfig `envPrefix:""`
+}
+
 func Load() (*Config, error) {
+	_ = godotenv.Load()
 	var cfg Config
 	if err := env.Parse(&cfg); err != nil {
 		return nil, err

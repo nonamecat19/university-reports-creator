@@ -4,13 +4,11 @@ import (
 	"context"
 	"log"
 
-	"google.golang.org/grpc"
-
-	pbDocument "github.com/nnc/university-reports-creator/service-document/gen/document"
-	pbTemplate "github.com/nnc/university-reports-creator/service-document/gen/template"
+	"github.com/nnc/university-reports-creator/gen/go/document"
+	"github.com/nnc/university-reports-creator/gen/go/template"
+	grpcserver "github.com/nnc/university-reports-creator/pkg/shared/grpc"
 	"github.com/nnc/university-reports-creator/service-document/internal/config"
 	"github.com/nnc/university-reports-creator/service-document/internal/db"
-	"github.com/nnc/university-reports-creator/service-document/internal/grpcserver"
 	"github.com/nnc/university-reports-creator/service-document/internal/repository"
 	"github.com/nnc/university-reports-creator/service-document/internal/service"
 )
@@ -32,12 +30,8 @@ func main() {
 	repos := repository.New(surrealDB)
 	svcs := service.New(repos)
 
-	srv := grpcserver.New(
-		func(s *grpc.Server) { pbDocument.RegisterDocumentServiceServer(s, svcs.Document) },
-		func(s *grpc.Server) { pbTemplate.RegisterTemplateServiceServer(s, svcs.Template) },
-	)
-
-	if err := grpcserver.Run(srv, cfg.GRPCPort); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
+	srv := grpcserver.New()
+	document.RegisterDocumentServiceServer(srv.Server(), svcs.Document)
+	template.RegisterTemplateServiceServer(srv.Server(), svcs.Template)
+	srv.Run(cfg.GRPCPort)
 }
