@@ -28,10 +28,13 @@ sqlc:
 	sqlc generate
 
 migrate-up:
-	psql "$(DATABASE_URL)" -f sql/schema/001_users.sql
+	goose -dir=cmd/server/migrations postgres "$(DATABASE_URL)" up
 
 migrate-down:
-	psql "$(DATABASE_URL)" -c "DROP TABLE IF EXISTS users;"
+	goose -dir=cmd/server/migrations postgres "$(DATABASE_URL)" down
+
+migrate-create:
+	goose -dir=cmd/server/migrations create $(NAME) sql
 
 db-up:
 	docker compose up -d

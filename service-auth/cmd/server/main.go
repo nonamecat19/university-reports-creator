@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"log/slog"
 	"net"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"syscall"
 
 	_ "github.com/lib/pq"
+	"github.com/pressly/goose/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -20,6 +22,9 @@ import (
 	"github.com/nnc/university-reports-creator/service-auth/internal/service"
 	"github.com/nnc/university-reports-creator/service-auth/internal/token"
 )
+
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
 
 func main() {
 	cfg, err := config.Load()
@@ -37,6 +42,12 @@ func main() {
 
 	if err := conn.Ping(); err != nil {
 		slog.Error("failed to ping database", "error", err)
+		os.Exit(1)
+	}
+
+	goose.SetBaseFS(migrationsFS)
+	if err := goose.UpContext(context.Background(), conn, "migrations"); err != nil {
+		slog.Error("failed to run migrations", "error", err)
 		os.Exit(1)
 	}
 
