@@ -1,47 +1,26 @@
 package config
 
 import (
-	"strings"
-
-	"github.com/spf13/viper"
+	"github.com/caarlos0/env/v11"
 )
 
 type Config struct {
-	GRPCPort  string         `mapstructure:"GRPC_PORT"`
-	SurrealDB SurrealDBConfig `mapstructure:",squash"`
+	GRPCPort  string `env:"GRPC_PORT" envDefault:":50052"`
+	SurrealDB SurrealDBConfig
 }
 
 type SurrealDBConfig struct {
-	URL       string `mapstructure:"SURREALDB_URL"`
-	Username  string `mapstructure:"SURREALDB_USERNAME"`
-	Password  string `mapstructure:"SURREALDB_PASSWORD"`
-	Namespace string `mapstructure:"SURREALDB_NAMESPACE"`
-	Database  string `mapstructure:"SURREALDB_DATABASE"`
+	URL       string `env:"SURREALDB_URL" envDefault:"ws://localhost:8000"`
+	Username  string `env:"SURREALDB_USERNAME" envDefault:"root"`
+	Password  string `env:"SURREALDB_PASSWORD" envDefault:"root"`
+	Namespace string `env:"SURREALDB_NAMESPACE" envDefault:"diploma"`
+	Database  string `env:"SURREALDB_DATABASE" envDefault:"main"`
 }
 
 func Load() (*Config, error) {
-	viper.SetConfigFile(".env")
-	viper.SetConfigType("env")
-	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
-	viper.SetDefault("GRPC_PORT", ":50052")
-	viper.SetDefault("SURREALDB_URL", "ws://localhost:8000")
-	viper.SetDefault("SURREALDB_USERNAME", "root")
-	viper.SetDefault("SURREALDB_PASSWORD", "root")
-	viper.SetDefault("SURREALDB_NAMESPACE", "diploma")
-	viper.SetDefault("SURREALDB_DATABASE", "main")
-
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, err
-		}
-	}
-
 	var cfg Config
-	if err := viper.Unmarshal(&cfg); err != nil {
+	if err := env.Parse(&cfg); err != nil {
 		return nil, err
 	}
-
 	return &cfg, nil
 }
