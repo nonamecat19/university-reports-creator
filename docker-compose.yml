@@ -42,7 +42,8 @@ services:
 
   service-auth:
     build:
-      context: ./service-auth
+      context: .
+      dockerfile: service-auth/Dockerfile
     container_name: service-auth
     restart: unless-stopped
     environment:
@@ -59,7 +60,8 @@ services:
 
   service-document:
     build:
-      context: ./service-document
+      context: .
+      dockerfile: service-document/Dockerfile
     container_name: service-document
     restart: unless-stopped
     environment:
@@ -74,6 +76,23 @@ services:
     depends_on:
       surrealdb-health:
         condition: service_healthy
+
+  service-gateway:
+    build:
+      context: .
+      dockerfile: service-gateway/Dockerfile
+    container_name: service-gateway
+    restart: unless-stopped
+    environment:
+      HTTP_PORT: ":8080"
+      AUTH_ADDR: service-auth:50051
+      DOC_ADDR: service-document:50052
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-strong-secret}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - service-auth
+      - service-document
 
 volumes:
   pgdata:
