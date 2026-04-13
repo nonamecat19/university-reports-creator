@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/nnc/university-reports-creator/service-auth/gen/auth"
+	pb "github.com/nnc/university-reports-creator/gen/go/auth"
 	"github.com/nnc/university-reports-creator/service-auth/internal/model"
 	"github.com/nnc/university-reports-creator/service-auth/internal/repository"
 	"github.com/nnc/university-reports-creator/service-auth/internal/token"

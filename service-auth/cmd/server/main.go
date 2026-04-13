@@ -5,19 +5,15 @@ import (
 	"database/sql"
 	"embed"
 	"log/slog"
-	"net"
 	"os"
-	"os/signal"
-	"syscall"
+	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 
-	pb "github.com/nnc/university-reports-creator/service-auth/gen/auth"
-	"github.com/nnc/university-reports-creator/service-auth/internal/config"
-	"github.com/nnc/university-reports-creator/service-auth/internal/interceptor"
+	"github.com/nnc/university-reports-creator/gen/go/auth"
+	"github.com/nnc/university-reports-creator/pkg/shared/config"
+	grpcserver "github.com/nnc/university-reports-creator/pkg/shared/grpc"
 	"github.com/nnc/university-reports-creator/service-auth/internal/repository"
 	"github.com/nnc/university-reports-creator/service-auth/internal/service"
 	"github.com/nnc/university-reports-creator/service-auth/internal/token"
@@ -26,10 +22,30 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+type AuthConfig struct {
+	config.BaseConfig
+	JWTSecret            string `env:"JWT_SECRET"`
+	AccessTokenDuration  string `env:"ACCESS_TOKEN_DURATION" envDefault:"15m"`
+	RefreshTokenDuration string `env:"REFRESH_TOKEN_DURATION" envDefault:"168h"`
+	DatabaseURL          string `env:"DATABASE_URL"`
+}
+
 func main() {
-	cfg, err := config.Load()
+	cfg, err := config.Load[AuthConfig]()
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
+	}
+
+	accessDur, err := time.ParseDuration(cfg.AccessTokenDuration)
+	if err != nil {
+		slog.Error("invalid access token duration", "error", err)
+		os.Exit(1)
+	}
+
+	refreshDur, err := time.ParseDuration(cfg.RefreshTokenDuration)
+	if err != nil {
+		slog.Error("invalid refresh token duration", "error", err)
 		os.Exit(1)
 	}
 
@@ -52,34 +68,10 @@ func main() {
 	}
 
 	repo := repository.NewUserRepository(conn)
-	tokenManager := token.NewJWTManager(cfg.JWTSecret, cfg.AccessTokenDuration, cfg.RefreshTokenDuration)
+	tokenManager := token.NewJWTManager(cfg.JWTSecret, accessDur, refreshDur)
 	authService := service.NewAuthService(repo, tokenManager)
 
-	srv := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptor.UnaryLogging()),
-	)
-	pb.RegisterAuthServiceServer(srv, authService)
-	reflection.Register(srv)
-
-	lis, err := net.Listen("tcp", cfg.GRPCPort)
-	if err != nil {
-		slog.Error("failed to listen", "error", err)
-		os.Exit(1)
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	go func() {
-		slog.Info("gRPC server starting", "port", cfg.GRPCPort)
-		if err := srv.Serve(lis); err != nil {
-			slog.Error("server error", "error", err)
-			os.Exit(1)
-		}
-	}()
-
-	<-ctx.Done()
-	slog.Info("shutting down server...")
-	srv.GracefulStop()
-	slog.Info("server stopped")
+	srv := grpcserver.New()
+	auth.RegisterAuthServiceServer(srv.Server(), authService)
+	srv.Run(cfg.GRPCPort)
 }

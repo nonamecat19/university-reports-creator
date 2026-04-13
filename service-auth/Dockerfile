@@ -1,10 +1,14 @@
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
-COPY go.mod go.sum ./
+
+COPY gen/go ../gen/go
+COPY pkg/shared ../pkg/shared
+
+COPY service-auth/go.mod service-auth/go.sum ./
 RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 go build -o /server ./cmd/server
+COPY service-auth ./
+RUN cd /app && go mod tidy && CGO_ENABLED=0 go build -o /server ./cmd/server
 
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates
