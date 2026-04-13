@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: auth-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-auth}
@@ -11,18 +10,70 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   surrealdb:
     image: surrealdb/surrealdb:latest
     pull_policy: always
     user: root
-    container_name: auth-surrealdb
     restart: unless-stopped
     command: start --user root --pass root surrealkv:/data
     volumes:
       - surrealdb_data:/data
     ports:
       - "8000:8000"
+
+  surrealdb-health:
+    image: alpine:latest
+    restart: "no"
+    command: ["sleep", "infinity"]
+    depends_on:
+      surrealdb:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://surrealdb:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  service-auth:
+    build:
+      context: ./service-auth
+    container_name: service-auth
+    restart: unless-stopped
+    environment:
+      GRPC_PORT: ":50051"
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-strong-secret}
+      ACCESS_TOKEN_DURATION: ${ACCESS_TOKEN_DURATION:-15m}
+      REFRESH_TOKEN_DURATION: ${REFRESH_TOKEN_DURATION:-168h}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-auth}?sslmode=disable
+    ports:
+      - "50051:50051"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  service-document:
+    build:
+      context: ./service-document
+    container_name: service-document
+    restart: unless-stopped
+    environment:
+      GRPC_PORT: ":50052"
+      SURREALDB_URL: ws://surrealdb:8000
+      SURREALDB_USERNAME: root
+      SURREALDB_PASSWORD: root
+      SURREALDB_NAMESPACE: diploma
+      SURREALDB_DATABASE: main
+    ports:
+      - "50052:50052"
+    depends_on:
+      surrealdb-health:
+        condition: service_healthy
 
 volumes:
   pgdata:
