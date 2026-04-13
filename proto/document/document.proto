@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package document;
+
+option go_package = "github.com/nnc/university-reports-creator/gen/go/document";
+
+service DocumentService {
+  rpc CreateDocument(CreateDocumentRequest) returns (DocumentResponse);
+  rpc GetDocument(GetDocumentRequest) returns (DocumentResponse);
+  rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
+  rpc UpdateDocument(UpdateDocumentRequest) returns (DocumentResponse);
+  rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
+}
+
+message Document {
+  string id = 1;
+  string name = 2;
+  string content = 3;
+}
+
+message CreateDocumentRequest {
+  string name = 1;
+  string content = 2;
+}
+
+message GetDocumentRequest {
+  string id = 1;
+}
+
+message ListDocumentsRequest {}
+
+message ListDocumentsResponse {
+  repeated Document documents = 1;
+}
+
+message UpdateDocumentRequest {
+  string id = 1;
+  string name = 2;
+  string content = 3;
+}
+
+message DeleteDocumentRequest {
+  string id = 1;
+}
+
+message DocumentResponse {
+  Document document = 1;
+}
+
+message DeleteDocumentResponse {}

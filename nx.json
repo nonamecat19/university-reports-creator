@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*"],
+    "protoInputs": ["{workspaceRoot}/proto/**/*.proto"]
+  },
+  "targetDefaults": {
+    "build": {
+      "cache": true,
+      "inputs": ["protoInputs", "{projectRoot}/**/*.go"]
+    },
+    "generate": {
+      "cache": true,
+      "outputs": ["{workspaceRoot}/gen/go", "{workspaceRoot}/gen/ts"]
+    },
+    "docker-build": {
+      "cache": true
+    }
+  },
+  "plugins": ["@nx-go/nx-go"]
+}

@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package template;
+
+option go_package = "github.com/nnc/university-reports-creator/gen/go/template";
+
+service TemplateService {
+  rpc CreateTemplate(CreateTemplateRequest) returns (TemplateResponse);
+  rpc GetTemplate(GetTemplateRequest) returns (TemplateResponse);
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc UpdateTemplate(UpdateTemplateRequest) returns (TemplateResponse);
+  rpc DeleteTemplate(DeleteTemplateRequest) returns (DeleteTemplateResponse);
+}
+
+message Template {
+  string id = 1;
+  string name = 2;
+  string content = 3;
+}
+
+message CreateTemplateRequest {
+  string name = 1;
+  string content = 2;
+}
+
+message GetTemplateRequest {
+  string id = 1;
+}
+
+message ListTemplatesRequest {}
+
+message ListTemplatesResponse {
+  repeated Template templates = 1;
+}
+
+message UpdateTemplateRequest {
+  string id = 1;
+  string name = 2;
+  string content = 3;
+}
+
+message DeleteTemplateRequest {
+  string id = 1;
+}
+
+message TemplateResponse {
+  Template template = 1;
+}
+
+message DeleteTemplateResponse {}

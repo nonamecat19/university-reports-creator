@@ -1,0 +1,11 @@
+go 1.25.0
+
+use (
+	./service-auth
+	./service-document
+	./service-gateway
+)
+
+replace github.com/nnc/university-reports-creator/gen/go => ./gen/go
+
+replace github.com/nnc/university-reports-creator/pkg/shared => ./pkg/shared

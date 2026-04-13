@@ -3,3 +3,9 @@
 .env
 bin
 tmp
+dist/
+node_modules
+go.work.sum
+gen/
+*.bak
+.nx/
