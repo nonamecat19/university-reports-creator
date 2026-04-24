@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-gateway
+  namespace: university-reports
+  labels:
+    app: service-gateway
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app: service-gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-gateway
+  namespace: university-reports
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-gateway
+  template:
+    metadata:
+      labels:
+        app: service-gateway
+    spec:
+      containers:
+        - name: service-gateway
+          image: university-reports-creator/service-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: HTTP_PORT
+              value: ":8080"
+            - name: SERVICE_NAME
+              value: "gateway"
+            - name: SERVICE_ADDRESS
+              value: "service-gateway:8080"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secrets
+                  key: JWT_SECRET
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
