@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
+	"os/signal"
+	"syscall"
 
 	"github.com/nnc/university-reports-creator/gen/go/document"
 	"github.com/nnc/university-reports-creator/gen/go/template"
@@ -33,5 +36,14 @@ func main() {
 	srv := grpcserver.New()
 	document.RegisterDocumentServiceServer(srv.Server(), svcs.Document)
 	template.RegisterTemplateServiceServer(srv.Server(), svcs.Template)
-	srv.Run(cfg.GRPCPort)
+
+	slog.Info("running in local mode - service discovery via env vars")
+
+	runCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	go srv.Run(cfg.GRPCPort)
+
+	<-runCtx.Done()
+	slog.Info("shutting down service-document...")
 }

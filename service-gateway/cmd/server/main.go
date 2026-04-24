@@ -25,9 +25,6 @@ import (
 
 type Config struct {
 	HTTPPort  string `env:"HTTP_PORT" envDefault:":8080"`
-	AuthAddr  string `env:"AUTH_ADDR" envDefault:":50051"`
-	DocAddr   string `env:"DOC_ADDR" envDefault:":50052"`
-	FilesAddr string `env:"FILES_ADDR" envDefault:":50053"`
 	JWTSecret string `env:"JWT_SECRET" envDefault:"change-me"`
 }
 
@@ -41,24 +38,28 @@ func getEnv(key, fallback string) string {
 func main() {
 	cfg := Config{
 		HTTPPort:  getEnv("HTTP_PORT", ":8080"),
-		AuthAddr:  getEnv("AUTH_ADDR", "localhost:50051"),
-		DocAddr:   getEnv("DOC_ADDR", "localhost:50052"),
-		FilesAddr: getEnv("FILES_ADDR", "localhost:50053"),
 		JWTSecret: getEnv("JWT_SECRET", "change-me"),
 	}
 
+	var authAddr, docAddr, filesAddr string
+
+	authAddr = getEnv("SERVICE_AUTH", "localhost:50051")
+	docAddr = getEnv("SERVICE_DOCUMENT", "localhost:50052")
+	filesAddr = getEnv("SERVICE_FILES", "localhost:50053")
+	log.Printf("local mode: auth=%s, document=%s, files=%s", authAddr, docAddr, filesAddr)
+
 	mux := http.NewServeMux()
 
-	authPath, authHandler := authconnect.NewAuthServiceHandler(&AuthHandler{addr: cfg.AuthAddr})
+	authPath, authHandler := authconnect.NewAuthServiceHandler(&AuthHandler{addr: authAddr})
 	mux.Handle(authPath, authHandler)
 
-	docPath, docHandler := documentconnect.NewDocumentServiceHandler(&DocumentHandler{addr: cfg.DocAddr, jwtSecret: cfg.JWTSecret})
+	docPath, docHandler := documentconnect.NewDocumentServiceHandler(&DocumentHandler{addr: docAddr, jwtSecret: cfg.JWTSecret})
 	mux.Handle(docPath, docHandler)
 
-	tmplPath, tmplHandler := templateconnect.NewTemplateServiceHandler(&TemplateHandler{addr: cfg.DocAddr, jwtSecret: cfg.JWTSecret})
+	tmplPath, tmplHandler := templateconnect.NewTemplateServiceHandler(&TemplateHandler{addr: docAddr, jwtSecret: cfg.JWTSecret})
 	mux.Handle(tmplPath, tmplHandler)
 
-	filesPath, filesHandler := fileconnect.NewFileServiceHandler(&FileHandler{addr: cfg.FilesAddr, jwtSecret: cfg.JWTSecret})
+	filesPath, filesHandler := fileconnect.NewFileServiceHandler(&FileHandler{addr: filesAddr, jwtSecret: cfg.JWTSecret})
 	mux.Handle(filesPath, filesHandler)
 
 	corsHandler := cors.New(cors.Options{

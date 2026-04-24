@@ -1,6 +1,6 @@
 module github.com/nnc/university-reports-creator/service-document
 
-go 1.25.0
+go 1.25.6
 
 require (
 	github.com/caarlos0/env/v11 v11.4.0
@@ -30,4 +30,5 @@ require (
 )
 
 replace github.com/nnc/university-reports-creator/gen/go => ../gen/go
+
 replace github.com/nnc/university-reports-creator/pkg/shared => ../pkg/shared

@@ -6,6 +6,8 @@ import (
 	"embed"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -73,5 +75,12 @@ func main() {
 
 	srv := grpcserver.New()
 	auth.RegisterAuthServiceServer(srv.Server(), authService)
-	srv.Run(cfg.GRPCPort)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	go srv.Run(cfg.GRPCPort)
+
+	<-ctx.Done()
+	slog.Info("shutting down service-auth...")
 }
