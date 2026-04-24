@@ -1,6 +1,7 @@
 .idea
 .claude
 .env
+.env.local
 bin
 tmp
 dist/
