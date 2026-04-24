@@ -1,0 +1,26 @@
+{
+  "projectName": "client-web",
+  "mode": "file-router",
+  "typescript": true,
+  "packageManager": "npm",
+  "includeExamples": true,
+  "tailwind": true,
+  "addOnOptions": {},
+  "envVarValues": {},
+  "git": false,
+  "routerOnly": false,
+  "version": 1,
+  "framework": "react",
+  "chosenAddOns": [
+    "biome",
+    "compiler",
+    "form",
+    "paraglide",
+    "shadcn",
+    "t3env",
+    "table",
+    "store",
+    "storybook",
+    "tanstack-query"
+  ]
+}
