@@ -1,0 +1,81 @@
+<div class="login-container">
+  <p-card styleClass="login-card">
+    <ng-template #title>
+      <div class="card-header">
+        <span class="logo">📋</span>
+        <h1>UniReports</h1>
+      </div>
+    </ng-template>
+    <ng-template #subtitle>Sign in to your account</ng-template>
+
+    @if (errorMessage()) {
+      <p-message
+        severity="error"
+        [text]="errorMessage()"
+        styleClass="mb-4 w-full"
+      />
+    }
+
+    <form (ngSubmit)="onSubmit()" class="form">
+      <div class="field">
+        <label for="email">Email</label>
+        <input
+          pInputText
+          id="email"
+          type="email"
+          [(ngModel)]="email"
+          name="email"
+          placeholder="Enter your email"
+          class="w-full"
+          required
+        />
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <p-password
+          id="password"
+          [(ngModel)]="password"
+          name="password"
+          placeholder="Enter your password"
+          [feedback]="false"
+          [toggleMask]="true"
+          styleClass="w-full"
+          required
+        />
+      </div>
+
+      <div class="field remember">
+        <a href="#" class="forgot-link">Forgot password?</a>
+      </div>
+
+      <p-button
+        type="submit"
+        label="Sign In"
+        [loading]="isLoading()"
+        [disabled]="!email || !password"
+        styleClass="w-full"
+      />
+
+      <div class="divider">
+        <span>or</span>
+      </div>
+
+      <p-button
+        type="button"
+        label="Continue with Google"
+        [loading]="isLoading()"
+        (onClick)="onGoogleSignIn()"
+        styleClass="w-full google-btn"
+        [icon]="'pi pi-google'"
+      />
+    </form>
+
+    <ng-template #footer>
+      <div class="card-footer">
+        <span>Don't have an account?</span>
+        <a href="#">Contact admin</a>
+      </div>
+    </ng-template>
+  </p-card>
+</div>

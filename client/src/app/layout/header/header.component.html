@@ -1,0 +1,27 @@
+<header class="header">
+  <div class="header-left">
+    <button type="button" class="menu-toggle" (click)="toggleSidebar()">
+      <i class="pi pi-bars"></i>
+    </button>
+    <span class="logo">UniReports</span>
+  </div>
+  <div class="header-right">
+    <button type="button" class="icon-btn">
+      <i class="pi pi-bell"></i>
+    </button>
+    <div class="user-menu" (click)="menu.toggle($event)">
+      <p-avatar
+        [label]="user()?.avatar ? undefined : userInitial()"
+        [image]="user()?.avatar || undefined"
+        shape="circle"
+        size="normal"
+      />
+      <div class="user-info">
+        <span class="user-name">{{ user()?.name ?? 'User' }}</span>
+        <span class="user-email">{{ user()?.email }}</span>
+      </div>
+      <i class="pi pi-chevron-down"></i>
+    </div>
+    <p-menu #menu [model]="menuItems" [popup]="true" />
+  </div>
+</header>
