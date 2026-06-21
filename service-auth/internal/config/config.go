@@ -13,15 +13,21 @@ type Config struct {
 	AccessTokenDuration  time.Duration
 	RefreshTokenDuration time.Duration
 	DatabaseURL          string
+	SupabaseURL          string
+	SupabaseAnonKey      string
+	SupabaseServiceKey   string
 }
 
 func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		GRPCPort:    getEnv("GRPC_PORT", ":50051"),
-		JWTSecret:   getEnv("JWT_SECRET", "dev-secret-change-me"),
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/auth?sslmode=disable"),
+		GRPCPort:           getEnv("GRPC_PORT", ":50051"),
+		JWTSecret:          getEnv("JWT_SECRET", "dev-secret-change-me"),
+		DatabaseURL:        getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/auth?sslmode=disable"),
+		SupabaseURL:        getEnv("SUPABASE_URL", ""),
+		SupabaseAnonKey:    getEnv("SUPABASE_ANON_KEY", ""),
+		SupabaseServiceKey: getEnv("SUPABASE_SERVICE_KEY", ""),
 	}
 
 	var err error

@@ -2,7 +2,8 @@ package service
 
 import (
 	"context"
-	"time"
+	"encoding/json"
+	"net/http"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -49,7 +50,6 @@ func (s *AuthService) Register(ctx context.Context, req *pb.RegisterRequest) (*p
 		Email:          req.GetEmail(),
 		Name:           req.GetName(),
 		HashedPassword: string(hashed),
-		CreatedAt:      time.Now(),
 	}
 
 	if err := s.repo.Create(ctx, user); err != nil {
@@ -138,4 +138,88 @@ func (s *AuthService) RefreshToken(_ context.Context, req *pb.RefreshTokenReques
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}, nil
+}
+
+func (s *AuthService) LoginWithGoogle(ctx context.Context, req *pb.LoginWithGoogleRequest) (*pb.LoginWithGoogleResponse, error) {
+	if req.GetIdToken() == "" {
+		return nil, status.Error(codes.InvalidArgument, "id_token is required")
+	}
+
+	// Verify the Google ID token using Google's tokeninfo endpoint
+	userData, err := s.verifyGoogleToken(ctx, req.GetIdToken())
+	if err != nil {
+		return nil, err
+	}
+
+	// Try to find existing user by email
+	user, err := s.repo.FindByEmail(ctx, userData.Email)
+	if err != nil {
+		// User doesn't exist - create new user with Google provider
+		hashed, _ := bcrypt.GenerateFromPassword([]byte(uuid.New().String()), bcrypt.DefaultCost)
+		user = &model.User{
+			ID:             uuid.New().String(),
+			Email:          userData.Email,
+			Name:           userData.Name,
+			HashedPassword: string(hashed),
+		}
+		if err := s.repo.Create(ctx, user); err != nil {
+			return nil, status.Error(codes.Internal, "failed to create user")
+		}
+	}
+
+	// Generate our own tokens
+	accessToken, err := s.tokens.GenerateAccessToken(user.ID, user.Email)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to generate access token")
+	}
+
+	refreshToken, err := s.tokens.GenerateRefreshToken(user.ID, user.Email)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to generate refresh token")
+	}
+
+	return &pb.LoginWithGoogleResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		UserId:       user.ID,
+		Email:        user.Email,
+		Name:         user.Name,
+	}, nil
+}
+
+type googleTokenInfo struct {
+	Sub           string `json:"sub"`
+	Email         string `json:"email"`
+	Name          string `json:"name"`
+	Picture       string `json:"picture"`
+	EmailVerified bool   `json:"email_verified"`
+}
+
+func (s *AuthService) verifyGoogleToken(ctx context.Context, idToken string) (*googleTokenInfo, error) {
+	url := "https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "failed to verify Google token")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, status.Error(codes.Unauthenticated, "invalid Google token")
+	}
+
+	var data googleTokenInfo
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, status.Error(codes.Unauthenticated, "failed to parse Google token")
+	}
+
+	if !data.EmailVerified {
+		return nil, status.Error(codes.Unauthenticated, "email not verified with Google")
+	}
+
+	if data.Sub == "" {
+		return nil, status.Error(codes.Unauthenticated, "invalid token - missing subject")
+	}
+
+	return &data, nil
 }

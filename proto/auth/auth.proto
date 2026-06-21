@@ -7,6 +7,7 @@ option go_package = "github.com/nnc/university-reports-creator/gen/go/auth";
 service AuthService {
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
+  rpc LoginWithGoogle(LoginWithGoogleRequest) returns (LoginWithGoogleResponse);
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
 }
@@ -29,6 +30,18 @@ message LoginRequest {
 message LoginResponse {
   string access_token = 1;
   string refresh_token = 2;
+}
+
+message LoginWithGoogleRequest {
+  string id_token = 1;
+}
+
+message LoginWithGoogleResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  string user_id = 3;
+  string email = 4;
+  string name = 5;
 }
 
 message ValidateTokenRequest {
