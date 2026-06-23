@@ -10,3 +10,8 @@ go.work.sum
 gen/
 *.bak
 .nx/
+certs/
+package-lock.json
+bun.lock
+./requirements
+./fixtures

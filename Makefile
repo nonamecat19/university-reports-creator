@@ -1,4 +1,4 @@
-.PHONY: help env-setup build build-auth build-document build-files build-gateway generate dev \
+.PHONY: help env-setup certs build build-auth build-document build-files build-gateway generate dev \
 dev-auth dev-document dev-files dev-gateway \
 infra-up infra-down infra-logs \
 k8s-up k8s-down k8s-deploy k8s-delete k8s-logs k8s-port-forward k8s-build k8s-load-images clean
@@ -16,6 +16,16 @@ env-setup: ## Copy .env.example to .env for all services
 	@cp -n service-files/.env.example service-files/.env || true
 	@cp -n service-gateway/.env.example service-gateway/.env || true
 	@echo "Created .env files from .env.example"
+
+certs: ## Generate a local dev RS256 keypair for JWT signing (FR-AUTH-03)
+	@mkdir -p certs
+	@if [ ! -f certs/jwt_private.pem ]; then \
+		openssl genrsa -out certs/jwt_private.pem 2048 2>/dev/null; \
+		openssl rsa -in certs/jwt_private.pem -pubout -out certs/jwt_public.pem 2>/dev/null; \
+		echo "Generated certs/jwt_private.pem + certs/jwt_public.pem"; \
+	else \
+		echo "certs/jwt_private.pem already exists, skipping"; \
+	fi
 
 # ============================================================================
 # Build (manual, rarely needed)
