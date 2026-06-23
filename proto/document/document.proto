@@ -2,49 +2,170 @@ syntax = "proto3";
 
 package document;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/nnc/university-reports-creator/gen/go/document";
 
+// Document CRUD + editing surface (FR-API-07). Snapshot/source/review RPCs are
+// added in their phases (P2+); revisions are per-section plus a separate
+// metadata revision (FR-EDT-09, FR-DAT-02).
 service DocumentService {
   rpc CreateDocument(CreateDocumentRequest) returns (DocumentResponse);
   rpc GetDocument(GetDocumentRequest) returns (DocumentResponse);
   rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
-  rpc UpdateDocument(UpdateDocumentRequest) returns (DocumentResponse);
+  rpc RenameDocument(RenameDocumentRequest) returns (DocumentResponse);
+  rpc UpdateMetadata(UpdateMetadataRequest) returns (DocumentResponse);
+  rpc UpdateSettings(UpdateSettingsRequest) returns (DocumentResponse);
+  rpc UpdateSection(UpdateSectionRequest) returns (SectionResponse);
+  rpc AddSection(AddSectionRequest) returns (SectionResponse);
+  rpc RemoveSection(RemoveSectionRequest) returns (RemoveSectionResponse);
+  rpc ReorderSections(ReorderSectionsRequest) returns (ReorderSectionsResponse);
   rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_OWNER = 1;
+  ROLE_EDITOR = 2;
+  ROLE_COMMENTER = 3;
+  ROLE_VIEWER = 4;
+}
+
+enum SectionKind {
+  SECTION_KIND_UNSPECIFIED = 0;
+  SECTION_KIND_CHAPTER = 1;
+  SECTION_KIND_APPENDIX = 2;
+}
+
+message Settings {
+  string citation_style = 1;
+  // by_order | alphabetical (FR-BIB-06)
+  string numbering_mode = 2;
+  bool include_uncited = 3;
+  // repeat_header | continuation_caption (FR-TBL-08/09)
+  string table_continuation = 4;
+}
+
+message Section {
+  string id = 1;
+  // Template section this instantiates; empty for user-added extra sections.
+  string template_section_id = 2;
+  string title = 3;
+  SectionKind kind = 4;
+  int32 order = 5;
+  bool required = 6;
+  // Per-section optimistic concurrency (FR-EDT-09).
+  int32 revision = 7;
+  // ProseMirror JSON (schema per FR-EDT-04).
+  string content_json = 8;
+  google.protobuf.Timestamp updated_at = 9;
 }
 
 message Document {
   string id = 1;
-  string name = 2;
-  string content = 3;
+  string owner_id = 2;
+  string template_id = 3;
+  int32 template_version = 4;
+  string title = 5;
+  // field_name -> value (template metadata fields).
+  map<string, string> metadata = 6;
+  Settings settings = 7;
+  // Optimistic concurrency for metadata/settings writes (FR-EDT-09).
+  int32 metadata_revision = 8;
+  // Caller's effective role, resolved server-side.
+  Role my_role = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
 }
 
 message CreateDocumentRequest {
-  string name = 1;
-  string content = 2;
+  // Optional in P1 (documents can start without a template).
+  string template_id = 1;
+  int32 template_version = 2;
+  string title = 3;
 }
 
 message GetDocumentRequest {
   string id = 1;
 }
 
-message ListDocumentsRequest {}
+enum DocumentFilter {
+  DOCUMENT_FILTER_UNSPECIFIED = 0;
+  DOCUMENT_FILTER_OWN = 1;
+  DOCUMENT_FILTER_SHARED = 2;
+}
+
+message ListDocumentsRequest {
+  DocumentFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
 
 message ListDocumentsResponse {
   repeated Document documents = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
 }
 
-message UpdateDocumentRequest {
+message RenameDocumentRequest {
   string id = 1;
-  string name = 2;
-  string content = 3;
+  string title = 2;
+}
+
+message UpdateMetadataRequest {
+  string id = 1;
+  map<string, string> values = 2;
+  int32 metadata_revision = 3;
+}
+
+message UpdateSettingsRequest {
+  string id = 1;
+  Settings settings = 2;
+  int32 metadata_revision = 3;
+}
+
+message UpdateSectionRequest {
+  string document_id = 1;
+  string section_id = 2;
+  string content_json = 3;
+  int32 section_revision = 4;
+}
+
+message AddSectionRequest {
+  string document_id = 1;
+  string title = 2;
+  SectionKind kind = 3;
+  // Insert position; appended when omitted.
+  int32 order = 4;
+}
+
+message RemoveSectionRequest {
+  string document_id = 1;
+  string section_id = 2;
+}
+
+message RemoveSectionResponse {}
+
+message ReorderSectionsRequest {
+  string document_id = 1;
+  repeated string section_ids = 2;
+}
+
+message ReorderSectionsResponse {
+  repeated Section sections = 1;
 }
 
 message DeleteDocumentRequest {
   string id = 1;
 }
 
+message DeleteDocumentResponse {}
+
 message DocumentResponse {
   Document document = 1;
+  repeated Section sections = 2;
 }
 
-message DeleteDocumentResponse {}
+message SectionResponse {
+  Section section = 1;
+}

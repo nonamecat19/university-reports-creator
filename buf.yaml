@@ -1,5 +1,7 @@
 version: v2
-name: buf.build/nnc/university-reports-creator
+modules:
+  - path: proto
+    name: buf.build/nnc/university-reports-creator
 lint:
   use:
     - STANDARD

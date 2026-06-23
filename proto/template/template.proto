@@ -2,49 +2,109 @@ syntax = "proto3";
 
 package template;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/nnc/university-reports-creator/gen/go/template";
 
+// Template lifecycle (FR-API-06). Parsing (CreateTemplate with file_ref,
+// ConfirmTemplate, UploadTemplateVersion) is fulfilled by service-render from P2;
+// in P1 templates are metadata records only.
 service TemplateService {
   rpc CreateTemplate(CreateTemplateRequest) returns (TemplateResponse);
+  rpc ConfirmTemplate(ConfirmTemplateRequest) returns (TemplateResponse);
   rpc GetTemplate(GetTemplateRequest) returns (TemplateResponse);
   rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
-  rpc UpdateTemplate(UpdateTemplateRequest) returns (TemplateResponse);
+  rpc UpdateTemplateMeta(UpdateTemplateMetaRequest) returns (TemplateResponse);
+  rpc UploadTemplateVersion(UploadTemplateVersionRequest) returns (TemplateResponse);
   rpc DeleteTemplate(DeleteTemplateRequest) returns (DeleteTemplateResponse);
+}
+
+enum ReportType {
+  REPORT_TYPE_UNSPECIFIED = 0;
+  REPORT_TYPE_COURSE = 1;
+  REPORT_TYPE_DIPLOMA = 2;
+  REPORT_TYPE_PRACTICE = 3;
+  REPORT_TYPE_OTHER = 4;
+}
+
+enum Visibility {
+  VISIBILITY_UNSPECIFIED = 0;
+  VISIBILITY_PRIVATE = 1;
+  VISIBILITY_PUBLIC = 2;
 }
 
 message Template {
   string id = 1;
-  string name = 2;
-  string content = 3;
+  string owner_id = 2;
+  string name = 3;
+  string description = 4;
+  ReportType report_type = 5;
+  Visibility visibility = 6;
+  int32 current_version = 7;
+  // Parsed TemplateModel of the current version as JSON (FR-TPL-08); empty in P1.
+  string model_json = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
 }
 
 message CreateTemplateRequest {
   string name = 1;
-  string content = 2;
+  string description = 2;
+  ReportType report_type = 3;
+  // MinIO object key of the uploaded docx (via FileService); optional in P1.
+  string file_ref = 4;
+}
+
+message ConfirmTemplateRequest {
+  string id = 1;
+  // Reviewed/adjusted TemplateModel JSON (FR-TPL-11).
+  string adjusted_model_json = 2;
 }
 
 message GetTemplateRequest {
   string id = 1;
 }
 
-message ListTemplatesRequest {}
+enum TemplateFilter {
+  TEMPLATE_FILTER_UNSPECIFIED = 0;
+  TEMPLATE_FILTER_OWN = 1;
+  TEMPLATE_FILTER_PUBLIC = 2;
+}
+
+message ListTemplatesRequest {
+  TemplateFilter filter = 1;
+  ReportType report_type = 2;
+  string query = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
 
 message ListTemplatesResponse {
   repeated Template templates = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
 }
 
-message UpdateTemplateRequest {
+message UpdateTemplateMetaRequest {
   string id = 1;
   string name = 2;
-  string content = 3;
+  string description = 3;
+  Visibility visibility = 4;
+}
+
+message UploadTemplateVersionRequest {
+  string id = 1;
+  string file_ref = 2;
 }
 
 message DeleteTemplateRequest {
   string id = 1;
 }
 
+message DeleteTemplateResponse {}
+
 message TemplateResponse {
   Template template = 1;
+  // Parse diagnostics returned on create/upload (FR-TPL-09); empty in P1.
+  repeated string warnings = 2;
 }
-
-message DeleteTemplateResponse {}

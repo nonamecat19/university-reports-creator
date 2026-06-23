@@ -12,6 +12,7 @@
     "@bufbuild/buf": "^1.67.0",
     "@nx-go/nx-go": "^3.3.1",
     "@nx/js": "^20.0.0",
+    "@protobuf-ts/plugin": "^2.11.1",
     "nx": "^20.0.0",
     "typescript": "^5.0.0"
   }

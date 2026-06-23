@@ -10,6 +10,11 @@ service AuthService {
   rpc LoginWithGoogle(LoginWithGoogleRequest) returns (LoginWithGoogleResponse);
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+  // Revokes the given refresh token (FR-AUTH-06).
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  // Profile of the authenticated user (user id comes from gateway metadata).
+  rpc GetProfile(GetProfileRequest) returns (ProfileResponse);
+  rpc UpdateProfile(UpdateProfileRequest) returns (ProfileResponse);
 }
 
 message RegisterRequest {
@@ -61,4 +66,37 @@ message RefreshTokenRequest {
 message RefreshTokenResponse {
   string access_token = 1;
   string refresh_token = 2;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+message LogoutResponse {}
+
+message GetProfileRequest {}
+
+// Report-prefill defaults used to prefill template metadata fields (FR-AUTH-08).
+message Profile {
+  string user_id = 1;
+  string email = 2;
+  string name = 3;
+  string university = 4;
+  string faculty = 5;
+  string department = 6;
+  string student_group = 7;
+  string supervisor = 8;
+}
+
+message UpdateProfileRequest {
+  string name = 1;
+  string university = 2;
+  string faculty = 3;
+  string department = 4;
+  string student_group = 5;
+  string supervisor = 6;
+}
+
+message ProfileResponse {
+  Profile profile = 1;
 }
