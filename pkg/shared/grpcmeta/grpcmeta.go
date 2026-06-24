@@ -1,0 +1,62 @@
+// Package grpcmeta defines the cross-service metadata contract (FR-ARC-15/17):
+// metadata keys and context helpers for request id and authenticated user id.
+package grpcmeta
+
+import (
+	"context"
+
+	"github.com/google/uuid"
+	"google.golang.org/grpc/metadata"
+)
+
+const (
+	RequestIDKey = "x-request-id"
+	UserIDKey    = "x-user-id"
+)
+
+type ctxKey string
+
+const (
+	ctxRequestID ctxKey = "request_id"
+	ctxUserID    ctxKey = "user_id"
+)
+
+func WithRequestID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, ctxRequestID, id)
+}
+
+func RequestID(ctx context.Context) string {
+	v, _ := ctx.Value(ctxRequestID).(string)
+	return v
+}
+
+func WithUserID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, ctxUserID, id)
+}
+
+// UserID returns the authenticated user id injected by the gateway (FR-AUTH-13),
+// or "" for unauthenticated calls.
+func UserID(ctx context.Context) string {
+	v, _ := ctx.Value(ctxUserID).(string)
+	return v
+}
+
+// FromIncoming extracts the first metadata value for key from the incoming context.
+func FromIncoming(ctx context.Context, key string) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	if vals := md.Get(key); len(vals) > 0 {
+		return vals[0]
+	}
+	return ""
+}
+
+// EnsureRequestID returns the incoming request id or generates a new one.
+func EnsureRequestID(ctx context.Context) string {
+	if id := FromIncoming(ctx, RequestIDKey); id != "" {
+		return id
+	}
+	return uuid.NewString()
+}
