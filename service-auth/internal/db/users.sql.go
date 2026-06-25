@@ -7,21 +7,23 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 const createUser = `-- name: CreateUser :exec
-INSERT INTO users (id, email, name, hashed_password, created_at)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO users (id, email, name, hashed_password, google_sub, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $6)
 `
 
 type CreateUserParams struct {
 	ID             uuid.UUID
 	Email          string
 	Name           string
-	HashedPassword string
+	HashedPassword sql.NullString
+	GoogleSub      sql.NullString
 	CreatedAt      time.Time
 }
 
@@ -31,45 +33,210 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.Email,
 		arg.Name,
 		arg.HashedPassword,
+		arg.GoogleSub,
 		arg.CreatedAt,
 	)
 	return err
 }
 
 const findUserByEmail = `-- name: FindUserByEmail :one
-SELECT id, email, name, hashed_password, created_at
+SELECT id, email, name, hashed_password, google_sub, email_verified,
+       university, faculty, department, student_group, supervisor,
+       created_at, updated_at
 FROM users
 WHERE email = $1
 `
 
-func (q *Queries) FindUserByEmail(ctx context.Context, email string) (User, error) {
+type FindUserByEmailRow struct {
+	ID             uuid.UUID
+	Email          string
+	Name           string
+	HashedPassword sql.NullString
+	GoogleSub      sql.NullString
+	EmailVerified  bool
+	University     sql.NullString
+	Faculty        sql.NullString
+	Department     sql.NullString
+	StudentGroup   sql.NullString
+	Supervisor     sql.NullString
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+func (q *Queries) FindUserByEmail(ctx context.Context, email string) (FindUserByEmailRow, error) {
 	row := q.db.QueryRowContext(ctx, findUserByEmail, email)
-	var i User
+	var i FindUserByEmailRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
 		&i.Name,
 		&i.HashedPassword,
+		&i.GoogleSub,
+		&i.EmailVerified,
+		&i.University,
+		&i.Faculty,
+		&i.Department,
+		&i.StudentGroup,
+		&i.Supervisor,
 		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const findUserByGoogleSub = `-- name: FindUserByGoogleSub :one
+SELECT id, email, name, hashed_password, google_sub, email_verified,
+       university, faculty, department, student_group, supervisor,
+       created_at, updated_at
+FROM users
+WHERE google_sub = $1
+`
+
+type FindUserByGoogleSubRow struct {
+	ID             uuid.UUID
+	Email          string
+	Name           string
+	HashedPassword sql.NullString
+	GoogleSub      sql.NullString
+	EmailVerified  bool
+	University     sql.NullString
+	Faculty        sql.NullString
+	Department     sql.NullString
+	StudentGroup   sql.NullString
+	Supervisor     sql.NullString
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+func (q *Queries) FindUserByGoogleSub(ctx context.Context, googleSub sql.NullString) (FindUserByGoogleSubRow, error) {
+	row := q.db.QueryRowContext(ctx, findUserByGoogleSub, googleSub)
+	var i FindUserByGoogleSubRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.HashedPassword,
+		&i.GoogleSub,
+		&i.EmailVerified,
+		&i.University,
+		&i.Faculty,
+		&i.Department,
+		&i.StudentGroup,
+		&i.Supervisor,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const findUserByID = `-- name: FindUserByID :one
-SELECT id, email, name, hashed_password, created_at
+SELECT id, email, name, hashed_password, google_sub, email_verified,
+       university, faculty, department, student_group, supervisor,
+       created_at, updated_at
 FROM users
 WHERE id = $1
 `
 
-func (q *Queries) FindUserByID(ctx context.Context, id uuid.UUID) (User, error) {
+type FindUserByIDRow struct {
+	ID             uuid.UUID
+	Email          string
+	Name           string
+	HashedPassword sql.NullString
+	GoogleSub      sql.NullString
+	EmailVerified  bool
+	University     sql.NullString
+	Faculty        sql.NullString
+	Department     sql.NullString
+	StudentGroup   sql.NullString
+	Supervisor     sql.NullString
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+func (q *Queries) FindUserByID(ctx context.Context, id uuid.UUID) (FindUserByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, findUserByID, id)
-	var i User
+	var i FindUserByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
 		&i.Name,
 		&i.HashedPassword,
+		&i.GoogleSub,
+		&i.EmailVerified,
+		&i.University,
+		&i.Faculty,
+		&i.Department,
+		&i.StudentGroup,
+		&i.Supervisor,
 		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserProfile = `-- name: UpdateUserProfile :one
+UPDATE users
+SET name = $2, university = $3, faculty = $4, department = $5,
+    student_group = $6, supervisor = $7, updated_at = $8
+WHERE id = $1
+RETURNING id, email, name, hashed_password, google_sub, email_verified,
+          university, faculty, department, student_group, supervisor,
+          created_at, updated_at
+`
+
+type UpdateUserProfileParams struct {
+	ID           uuid.UUID
+	Name         string
+	University   sql.NullString
+	Faculty      sql.NullString
+	Department   sql.NullString
+	StudentGroup sql.NullString
+	Supervisor   sql.NullString
+	UpdatedAt    time.Time
+}
+
+type UpdateUserProfileRow struct {
+	ID             uuid.UUID
+	Email          string
+	Name           string
+	HashedPassword sql.NullString
+	GoogleSub      sql.NullString
+	EmailVerified  bool
+	University     sql.NullString
+	Faculty        sql.NullString
+	Department     sql.NullString
+	StudentGroup   sql.NullString
+	Supervisor     sql.NullString
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (UpdateUserProfileRow, error) {
+	row := q.db.QueryRowContext(ctx, updateUserProfile,
+		arg.ID,
+		arg.Name,
+		arg.University,
+		arg.Faculty,
+		arg.Department,
+		arg.StudentGroup,
+		arg.Supervisor,
+		arg.UpdatedAt,
+	)
+	var i UpdateUserProfileRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.HashedPassword,
+		&i.GoogleSub,
+		&i.EmailVerified,
+		&i.University,
+		&i.Faculty,
+		&i.Department,
+		&i.StudentGroup,
+		&i.Supervisor,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
