@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"log"
 	"log/slog"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -19,16 +19,23 @@ import (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	ctx := context.Background()
 
 	surrealDB, err := db.Connect(ctx, cfg.SurrealDB)
 	if err != nil {
-		log.Fatalf("failed to init database: %v", err)
+		slog.Error("failed to init database", "error", err)
+		os.Exit(1)
 	}
 	defer surrealDB.Close(ctx)
+
+	if err := repository.ApplySchema(ctx, surrealDB); err != nil {
+		slog.Error("failed to apply surrealdb schema", "error", err)
+		os.Exit(1)
+	}
 
 	repos := repository.New(surrealDB)
 	svcs := service.New(repos)
