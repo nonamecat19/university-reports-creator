@@ -11,8 +11,7 @@
     </button>
     <div class="user-menu" (click)="menu.toggle($event)">
       <p-avatar
-        [label]="user()?.avatar ? undefined : userInitial()"
-        [image]="user()?.avatar || undefined"
+        [label]="userInitial()"
         shape="circle"
         size="normal"
       />

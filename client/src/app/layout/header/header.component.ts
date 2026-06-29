@@ -1,9 +1,7 @@
 import { Component, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
-import { Button } from 'primeng/button';
-import { Menu } from 'primeng/menu';
+import type { MenuItem } from 'primeng/api';
 import { Avatar } from 'primeng/avatar';
-import { MenuItem } from 'primeng/api';
+import { Menu } from 'primeng/menu';
 import { AuthService } from '../../core/services/auth.service';
 import { LayoutService } from '../layout.service';
 
@@ -49,7 +47,7 @@ export class HeaderComponent {
   }
 
   logout(): void {
-    this.authService.logout();
+    void this.authService.logout();
   }
 
   toggleSidebar(): void {

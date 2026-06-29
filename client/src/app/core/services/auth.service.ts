@@ -1,184 +1,236 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { computed, Injectable, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { createClient, SupabaseClient, AuthSession } from '@supabase/supabase-js';
-import type { User, LoginRequest } from '../../shared/models/user.model';
-import { UserRole } from '../../shared/models/user.model';
+import { AuthServiceClient } from '@gen/auth/auth.client';
+import { RpcError } from '@protobuf-ts/runtime-rpc';
 import { environment } from '../../../environments/environment';
+import type { LoginRequest, User } from '../../shared/models/user.model';
+import { accessToken } from '../grpc/token-holder';
+import { grpcTransport } from '../grpc/transport';
+
+const STORAGE_REFRESH_TOKEN = 'refresh_token';
+
+interface Session {
+  accessToken: string;
+  refreshToken: string;
+  userId: string;
+  email: string;
+  name: string;
+}
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private supabase: SupabaseClient;
-  private readonly _user = signal<User | null>(this.loadUser());
-  private readonly _token = signal<string | null>(this.loadToken());
+  private readonly client = new AuthServiceClient(grpcTransport);
+
+  private readonly _user = signal<User | null>(null);
   private readonly _isLoading = signal<boolean>(false);
+  /** In-flight silent refresh, shared so concurrent 401s trigger one refresh (FR-AUTH-10). */
+  private refreshInFlight: Promise<boolean> | null = null;
 
   readonly user = this._user.asReadonly();
-  readonly token = this._token.asReadonly();
   readonly isLoading = this._isLoading.asReadonly();
-  readonly isAuthenticated = computed(() => !!this._token() && !!this._user());
-  readonly userRole = computed(() => this._user()?.role ?? null);
+  readonly isAuthenticated = computed(() => !!accessToken() && !!this._user());
+
+  /** Resolves once the initial silent-refresh-from-localStorage attempt on
+   * app bootstrap has settled — route guards must await this (FR-AUTH-10). */
+  readonly ready: Promise<void>;
 
   constructor(private readonly router: Router) {
-    this.supabase = createClient(environment.supabaseUrl, environment.supabaseAnonKey);
-    this.setupAuthListener();
-  }
-
-  private setupAuthListener(): void {
-    this.supabase.auth.onAuthStateChange((event, session) => {
-      try {
-        if (event === 'SIGNED_IN' && session) {
-          this.handleSession(session);
-        } else if (event === 'SIGNED_OUT') {
-          this.clearStorage();
-          this._user.set(null);
-          this._token.set(null);
-        }
-      } catch (error) {
-        console.error('Auth state change error:', error);
-      }
-    });
+    this.ready = this.restoreSession();
   }
 
   async login(credentials: LoginRequest): Promise<boolean> {
     this._isLoading.set(true);
     try {
-      const { data, error } = await this.supabase.auth.signInWithPassword({
+      const call = this.client.login({
         email: credentials.email,
         password: credentials.password,
       });
-      if (error) throw error;
-      if (data.session) {
-        this.handleSession(data.session);
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    } finally {
-      this._isLoading.set(false);
-    }
-  }
-
-  async signInWithGoogle(): Promise<boolean> {
-    this._isLoading.set(true);
-    try {
-      const { data, error } = await this.supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin + '/auth/callback',
-        },
+      const resp = await call.response;
+      await this.applySession({
+        accessToken: resp.accessToken,
+        refreshToken: resp.refreshToken,
+        userId: '',
+        email: credentials.email,
+        name: '',
       });
-      if (error) {
-        console.error('Google sign in error:', error);
-        return false;
-      }
       return true;
     } catch (error) {
-      console.error('Google sign in error:', error);
+      console.error('Login failed', error);
       return false;
     } finally {
       this._isLoading.set(false);
     }
   }
 
-  async handleOAuthCallback(): Promise<void> {
+  async register(credentials: LoginRequest & { name: string }): Promise<boolean> {
     this._isLoading.set(true);
     try {
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const accessToken = hashParams.get('access_token');
-      const refreshToken = hashParams.get('refresh_token');
-
-      if (accessToken) {
-        const response = await fetch(`${environment.supabaseUrl}/auth/v1/user`, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            apikey: environment.supabaseAnonKey,
-          },
-        });
-
-        if (response.ok) {
-          const userData = await response.json();
-          const session: AuthSession = {
-            access_token: accessToken,
-            refresh_token: refreshToken || '',
-            expires_in: 3600,
-            expires_at: Math.floor(Date.now() / 1000) + 3600,
-            token_type: 'bearer',
-            user: userData as unknown as import('@supabase/supabase-js').User,
-          };
-          this.handleSession(session);
-          window.location.hash = '';
-          this.router.navigate(['/dashboard']);
-          return;
-        }
-      }
-
-      const {
-        data: { session },
-        error,
-      } = await this.supabase.auth.getSession();
-      if (error) throw error;
-      if (session) {
-        this.handleSession(session);
-        window.location.hash = '';
-        this.router.navigate(['/dashboard']);
-      }
+      await this.client.register(credentials).response;
+      return this.login(credentials);
     } catch (error) {
-      console.error('OAuth callback error:', error);
+      console.error('Registration failed', error);
+      return false;
     } finally {
       this._isLoading.set(false);
     }
   }
 
-  private handleSession(session: AuthSession): void {
-    const user: User = {
-      id: session.user.id,
-      email: session.user.email ?? '',
-      name:
-        ((session.user.user_metadata as Record<string, unknown>)?.['full_name'] as string) ??
-        session.user.email?.split('@')[0] ??
-        'User',
-      role: UserRole.Admin,
-      avatar: (session.user.user_metadata as Record<string, unknown>)?.['avatar_url'] as string,
-      createdAt: new Date(session.user.created_at),
-    };
-    this._user.set(user);
-    this._token.set(session.access_token);
-    this.saveToStorage(session);
+  /** Google sign-in via Google Identity Services (FR-AUTH-05): a browser
+   * popup/One Tap flow yields an ID token, which the backend verifies. */
+  async signInWithGoogle(): Promise<boolean> {
+    if (!environment.googleClientId) {
+      console.error('Google sign-in is not configured (missing googleClientId)');
+      return false;
+    }
+    this._isLoading.set(true);
+    try {
+      await this.loadGisScript();
+      const idToken = await this.requestGoogleIdToken();
+      const resp = await this.client.loginWithGoogle({ idToken }).response;
+      await this.applySession({
+        accessToken: resp.accessToken,
+        refreshToken: resp.refreshToken,
+        userId: resp.userId,
+        email: resp.email,
+        name: resp.name,
+      });
+      return true;
+    } catch (error) {
+      console.error('Google sign-in failed', error);
+      return false;
+    } finally {
+      this._isLoading.set(false);
+    }
   }
 
-  logout(): void {
-    this.supabase.auth.signOut();
-    this._user.set(null);
-    this._token.set(null);
-    this.clearStorage();
+  async logout(): Promise<void> {
+    const refreshToken = localStorage.getItem(STORAGE_REFRESH_TOKEN);
+    if (refreshToken) {
+      try {
+        await this.client.logout({ refreshToken }).response;
+      } catch (error) {
+        console.error('Logout RPC failed (discarding local session anyway)', error);
+      }
+    }
+    this.clearSession();
     this.router.navigate(['/auth/login']);
   }
 
-  hasRole(roles: UserRole[]): boolean {
-    const currentRole = this._user()?.role;
-    if (!currentRole) return false;
-    return roles.includes(currentRole);
+  /** Fetches profile fields used to prefill template metadata (FR-AUTH-08). */
+  async getProfile(): Promise<User | null> {
+    try {
+      const resp = await this.client.getProfile({}).response;
+      if (!resp.profile) return null;
+      const user: User = {
+        id: resp.profile.userId,
+        email: resp.profile.email,
+        name: resp.profile.name,
+        university: resp.profile.university,
+        faculty: resp.profile.faculty,
+        department: resp.profile.department,
+        studentGroup: resp.profile.studentGroup,
+        supervisor: resp.profile.supervisor,
+      };
+      this._user.set(user);
+      return user;
+    } catch (error) {
+      console.error('Failed to load profile', error);
+      return null;
+    }
   }
 
-  private loadUser(): User | null {
-    const stored = localStorage.getItem('auth_user');
-    return stored ? JSON.parse(stored) : null;
+  /** Calls fn, and on UNAUTHENTICATED attempts one silent refresh + retry
+   * (FR-AUTH-10) before giving up and redirecting to /auth/login. */
+  async callWithAuthRetry<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error instanceof RpcError && error.code === 'UNAUTHENTICATED') {
+        const refreshed = await this.silentRefresh();
+        if (refreshed) {
+          return await fn();
+        }
+        this.clearSession();
+        this.router.navigate(['/auth/login']);
+      }
+      throw error;
+    }
   }
 
-  private loadToken(): string | null {
-    return localStorage.getItem('auth_token');
+  private async silentRefresh(): Promise<boolean> {
+    if (!this.refreshInFlight) {
+      this.refreshInFlight = this.doSilentRefresh().finally(() => {
+        this.refreshInFlight = null;
+      });
+    }
+    return this.refreshInFlight;
   }
 
-  private saveToStorage(session: AuthSession): void {
-    localStorage.setItem('auth_user', JSON.stringify(this._user()));
-    localStorage.setItem('auth_token', session.access_token);
-    localStorage.setItem('auth_refresh', session.refresh_token);
+  private async doSilentRefresh(): Promise<boolean> {
+    const refreshToken = localStorage.getItem(STORAGE_REFRESH_TOKEN);
+    if (!refreshToken) return false;
+    try {
+      const resp = await this.client.refreshToken({ refreshToken }).response;
+      accessToken.set(resp.accessToken);
+      localStorage.setItem(STORAGE_REFRESH_TOKEN, resp.refreshToken);
+      return true;
+    } catch (error) {
+      console.error('Silent refresh failed', error);
+      return false;
+    }
   }
 
-  private clearStorage(): void {
-    localStorage.removeItem('auth_user');
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_refresh');
+  private async restoreSession(): Promise<void> {
+    const refreshToken = localStorage.getItem(STORAGE_REFRESH_TOKEN);
+    if (!refreshToken) return;
+    const ok = await this.silentRefresh();
+    if (ok) {
+      await this.getProfile();
+    }
+  }
+
+  private async applySession(session: Session): Promise<void> {
+    accessToken.set(session.accessToken);
+    localStorage.setItem(STORAGE_REFRESH_TOKEN, session.refreshToken);
+    await this.getProfile();
+  }
+
+  private clearSession(): void {
+    accessToken.set(null);
+    this._user.set(null);
+    localStorage.removeItem(STORAGE_REFRESH_TOKEN);
+  }
+
+  private loadGisScript(): Promise<void> {
+    if (window.google?.accounts?.id) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Failed to load Google Identity Services'));
+      document.head.appendChild(script);
+    });
+  }
+
+  private requestGoogleIdToken(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const identity = window.google?.accounts.id;
+      if (!identity) {
+        reject(new Error('Google Identity Services failed to load'));
+        return;
+      }
+      identity.initialize({
+        client_id: environment.googleClientId,
+        callback: (response) => {
+          if (response.credential) {
+            resolve(response.credential);
+          } else {
+            reject(new Error('Google sign-in did not return a credential'));
+          }
+        },
+      });
+      identity.prompt();
+    });
   }
 }

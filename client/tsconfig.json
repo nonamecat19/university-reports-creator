@@ -4,7 +4,6 @@
     "baseUrl": "./src",
     "outDir": "./dist/out-tsc",
     "strict": true,
-    "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
@@ -20,7 +19,8 @@
       "@app/*": ["app/*"],
       "@core/*": ["app/core/*"],
       "@features/*": ["app/features/*"],
-      "@shared/*": ["app/shared/*"]
+      "@shared/*": ["app/shared/*"],
+      "@gen/*": ["../../gen/ts/*"]
     }
   },
   "angularCompilerOptions": {

@@ -1,11 +1,11 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
-import { Router, ActivatedRoute } from '@angular/router';
+import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
+import { Button } from 'primeng/button';
 import { Card } from 'primeng/card';
 import { InputText } from 'primeng/inputtext';
-import { Password } from 'primeng/password';
-import { Button } from 'primeng/button';
 import { Message } from 'primeng/message';
+import { Password } from 'primeng/password';
 import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
@@ -14,20 +14,20 @@ import { AuthService } from '../../../core/services/auth.service';
   templateUrl: './login.component.html',
   styleUrl: './login.component.css',
 })
-export class LoginComponent implements OnInit {
+export class LoginComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
-  private readonly route = inject(ActivatedRoute);
 
   protected email = '';
   protected password = '';
+  protected name = '';
+  protected readonly mode = signal<'login' | 'register'>('login');
   protected readonly isLoading = this.authService.isLoading;
   protected readonly errorMessage = signal<string>('');
 
-  async ngOnInit(): Promise<void> {
-    if (window.location.hash.includes('access_token')) {
-      await this.authService.handleOAuthCallback();
-    }
+  toggleMode(): void {
+    this.mode.set(this.mode() === 'login' ? 'register' : 'login');
+    this.errorMessage.set('');
   }
 
   async onSubmit(): Promise<void> {
@@ -37,16 +37,26 @@ export class LoginComponent implements OnInit {
       this.errorMessage.set('Please enter email and password');
       return;
     }
+    if (this.mode() === 'register' && !this.name) {
+      this.errorMessage.set('Please enter your name');
+      return;
+    }
 
-    const success = await this.authService.login({
-      email: this.email,
-      password: this.password,
-    });
+    const success =
+      this.mode() === 'register'
+        ? await this.authService.register({
+            email: this.email,
+            password: this.password,
+            name: this.name,
+          })
+        : await this.authService.login({ email: this.email, password: this.password });
 
     if (success) {
       this.router.navigate(['/dashboard']);
     } else {
-      this.errorMessage.set('Invalid email or password');
+      this.errorMessage.set(
+        this.mode() === 'register' ? 'Could not create account' : 'Invalid email or password'
+      );
     }
   }
 

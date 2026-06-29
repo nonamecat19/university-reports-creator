@@ -1,6 +1,6 @@
 import { Component, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { MenuItem } from 'primeng/api';
+import type { MenuItem } from 'primeng/api';
 
 interface NavItem extends MenuItem {
   icon: string;
@@ -116,6 +116,7 @@ export class SidebarComponent {
 
   protected readonly navItems: NavItem[] = [
     { label: 'Dashboard', icon: 'pi pi-home', route: '/dashboard' },
+    { label: 'Documents', icon: 'pi pi-file-edit', route: '/documents' },
     { label: 'Projects', icon: 'pi pi-briefcase', route: '/projects' },
     { label: 'Templates', icon: 'pi pi-file', route: '/templates' },
     { label: 'Universities', icon: 'pi pi-building', route: '/universities' },

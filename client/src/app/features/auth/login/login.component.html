@@ -6,7 +6,7 @@
         <h1>UniReports</h1>
       </div>
     </ng-template>
-    <ng-template #subtitle>Sign in to your account</ng-template>
+    <ng-template #subtitle>{{ mode() === 'register' ? 'Create your account' : 'Sign in to your account' }}</ng-template>
 
     @if (errorMessage()) {
       <p-message
@@ -17,6 +17,22 @@
     }
 
     <form (ngSubmit)="onSubmit()" class="form">
+      @if (mode() === 'register') {
+        <div class="field">
+          <label for="name">Name</label>
+          <input
+            pInputText
+            id="name"
+            type="text"
+            [(ngModel)]="name"
+            name="name"
+            placeholder="Enter your name"
+            class="w-full"
+            required
+          />
+        </div>
+      }
+
       <div class="field">
         <label for="email">Email</label>
         <input
@@ -45,13 +61,15 @@
         />
       </div>
 
-      <div class="field remember">
-        <a href="#" class="forgot-link">Forgot password?</a>
-      </div>
+      @if (mode() === 'login') {
+        <div class="field remember">
+          <a href="#" class="forgot-link">Forgot password?</a>
+        </div>
+      }
 
       <p-button
         type="submit"
-        label="Sign In"
+        [label]="mode() === 'register' ? 'Create account' : 'Sign In'"
         [loading]="isLoading()"
         [disabled]="!email || !password"
         styleClass="w-full"
@@ -73,8 +91,13 @@
 
     <ng-template #footer>
       <div class="card-footer">
-        <span>Don't have an account?</span>
-        <a href="#">Contact admin</a>
+        @if (mode() === 'login') {
+          <span>Don't have an account?</span>
+          <a href="#" (click)="toggleMode(); $event.preventDefault()">Create one</a>
+        } @else {
+          <span>Already have an account?</span>
+          <a href="#" (click)="toggleMode(); $event.preventDefault()">Sign in</a>
+        }
       </div>
     </ng-template>
   </p-card>

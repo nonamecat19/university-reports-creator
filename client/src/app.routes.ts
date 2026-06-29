@@ -1,12 +1,13 @@
 import type { Routes } from '@angular/router';
-import { LayoutComponent } from './app/layout/layout.component';
-import { DashboardComponent } from './app/features/dashboard/dashboard.component';
-import { LoginComponent } from './app/features/auth/login/login.component';
-import { ProjectsListComponent } from './app/features/projects/projects-list.component';
-import { ProjectDetailComponent } from './app/features/projects/project-detail.component';
-import { TemplatesListComponent } from './app/features/templates/templates-list.component';
-import { TemplateDetailComponent } from './app/features/templates/template-detail.component';
 import { authGuard, guestGuard } from './app/core/guards/auth.guard';
+import { LoginComponent } from './app/features/auth/login/login.component';
+import { DashboardComponent } from './app/features/dashboard/dashboard.component';
+import { DocumentsListComponent } from './app/features/documents/documents-list.component';
+import { ProjectDetailComponent } from './app/features/projects/project-detail.component';
+import { ProjectsListComponent } from './app/features/projects/projects-list.component';
+import { TemplateDetailComponent } from './app/features/templates/template-detail.component';
+import { TemplatesListComponent } from './app/features/templates/templates-list.component';
+import { LayoutComponent } from './app/layout/layout.component';
 
 export const routes: Routes = [
   {
@@ -15,10 +16,6 @@ export const routes: Routes = [
     children: [
       {
         path: 'login',
-        component: LoginComponent,
-      },
-      {
-        path: 'callback',
         component: LoginComponent,
       },
       {
@@ -31,7 +28,7 @@ export const routes: Routes = [
   {
     path: '',
     component: LayoutComponent,
-    // canActivate: [authGuard],
+    canActivate: [authGuard],
     children: [
       {
         path: '',
@@ -41,6 +38,10 @@ export const routes: Routes = [
       {
         path: 'dashboard',
         component: DashboardComponent,
+      },
+      {
+        path: 'documents',
+        component: DocumentsListComponent,
       },
       {
         path: 'projects',
