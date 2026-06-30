@@ -13,5 +13,5 @@ gen/
 certs/
 package-lock.json
 bun.lock
-./requirements
-./fixtures
+/requirements
+/fixtures
