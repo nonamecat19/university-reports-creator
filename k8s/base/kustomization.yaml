@@ -10,6 +10,7 @@ resources:
   - service-auth.yaml
   - service-document.yaml
   - service-files.yaml
+  - service-ai.yaml
   - service-gateway.yaml
   - ingress.yaml
 

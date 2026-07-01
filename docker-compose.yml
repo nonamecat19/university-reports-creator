@@ -58,6 +58,25 @@ services:
       timeout: 3s
       retries: 5
 
+  service-ai:
+    build:
+      context: .
+      dockerfile: service-ai/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "50055:50055"
+    environment:
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      AI_MODEL: ${AI_MODEL:-gemma3:8b}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LANGUAGETOOL_ENABLED: "false"
+      LOG_LEVEL: ${AI_LOG_LEVEL:-INFO}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   pgdata:
   surrealdb_data:

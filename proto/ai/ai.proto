@@ -1,0 +1,202 @@
+syntax = "proto3";
+
+package ai;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/nnc/university-reports-creator/gen/go/ai";
+
+// service-ai exposes AI features through a provider-abstraction layer.
+// Local-first: Ollama is the default provider; cloud providers are
+// pluggable via configuration (FR-AI-01).
+service AIService {
+  // GenerateText — single-turn completion (FR-AI-06, FR-AI-07).
+  rpc GenerateText(GenerateTextRequest) returns (GenerateTextResponse);
+
+  // GenerateTextStream — streaming completion (FR-AI-03).
+  rpc GenerateTextStream(GenerateTextRequest) returns (stream GenerateTextChunk);
+
+  // AnalyzeDocument — structured whole-document review (FR-AI-08/09).
+  rpc AnalyzeDocument(AnalyzeDocumentRequest) returns (stream AnalysisFinding);
+
+  // CorrectGrammar — LanguageTool tier-1 + LLM tier-2 (FR-AI-11).
+  rpc CorrectGrammar(CorrectGrammarRequest) returns (stream GrammarSuggestion);
+
+  // FindSources — source suggestions for a section (FR-AI-13/14/15).
+  rpc FindSources(FindSourcesRequest) returns (stream SourceSuggestion);
+
+  // ParseReference — freeform string → CSL-JSON (FR-AI-13).
+  rpc ParseReference(ParseReferenceRequest) returns (ParseReferenceResponse);
+
+  // Ping — health check.
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+// ── Text generation ─────────────────────────────────────────────────
+
+message GenerateTextRequest {
+  string user_id = 1;
+  string session_id = 2;
+  string prompt = 3;
+  // System prompt override; empty uses the default academic-Ukrainian prompt.
+  string system_prompt = 4;
+  float temperature = 5;
+  int32 max_tokens = 6;
+  // If true, provider must return JSON matching the schema in json_schema.
+  bool json_mode = 7;
+  string json_schema = 8;
+}
+
+message GenerateTextResponse {
+  string text = 1;
+  int32 prompt_tokens = 2;
+  int32 completion_tokens = 3;
+  string model = 4;
+}
+
+message GenerateTextChunk {
+  string delta = 1;
+  bool done = 2;
+  int32 prompt_tokens = 3;
+  int32 completion_tokens = 4;
+}
+
+// ── Document analysis ───────────────────────────────────────────────
+
+message AnalyzeDocumentRequest {
+  string user_id = 1;
+  string document_id = 2;
+  // Document body as ProseMirror JSON or plain text.
+  string content = 3;
+  // Document metadata for context.
+  string topic = 4;
+  string report_type = 5;
+  // Section outlines for cross-section analysis.
+  repeated SectionInfo sections = 6;
+}
+
+message SectionInfo {
+  string id = 1;
+  string title = 2;
+  string content = 3;
+}
+
+message AnalysisFinding {
+  string section_id = 1;
+  string anchor_text = 2;
+  FindingSeverity severity = 3;
+  FindingCategory category = 4;
+  string message = 5;
+  // Index of this finding within the stream for ordering.
+  int32 ordinal = 6;
+}
+
+enum FindingSeverity {
+  FINDING_SEVERITY_UNSPECIFIED = 0;
+  FINDING_SEVERITY_INFO = 1;
+  FINDING_SEVERITY_WARNING = 2;
+  FINDING_SEVERITY_ERROR = 3;
+}
+
+enum FindingCategory {
+  FINDING_CATEGORY_UNSPECIFIED = 0;
+  FINDING_CATEGORY_STRUCTURE = 1;
+  FINDING_CATEGORY_TOPIC_RELEVANCE = 2;
+  FINDING_CATEGORY_CONCLUSIONS = 3;
+  FINDING_CATEGORY_COHERENCE = 4;
+  FINDING_CATEGORY_FORMATTING = 5;
+}
+
+// ── Grammar correction ──────────────────────────────────────────────
+
+message CorrectGrammarRequest {
+  string user_id = 1;
+  string text = 2;
+  string language = 3; // "uk" (default) or "en"
+  // If true, include style suggestions beyond grammar (FR-AI-11 tier-2).
+  bool include_style = 4;
+}
+
+message GrammarSuggestion {
+  int32 offset = 1;
+  int32 length = 2;
+  string original = 3;
+  string replacement = 4;
+  string message = 5;
+  GrammarTier tier = 6;
+  string rule_id = 7;
+  repeated string context = 8;
+}
+
+enum GrammarTier {
+  GRAMMAR_TIER_UNSPECIFIED = 0;
+  GRAMMAR_TIER_LANGUAGE_TOOL = 1;
+  GRAMMAR_TIER_LLM_STYLE = 2;
+}
+
+// ── Source assistance ───────────────────────────────────────────────
+
+message FindSourcesRequest {
+  string user_id = 1;
+  string section_text = 2;
+  string topic = 3;
+  // Optional: existing citations to check consistency with (FR-AI-14).
+  repeated CitationCheck citations = 4;
+}
+
+message CitationCheck {
+  string claim = 1;
+  string source_title = 2;
+  string source_abstract = 3;
+}
+
+message SourceSuggestion {
+  // Search queries the user can run (FR-AI-15).
+  repeated string search_queries = 1;
+  // Candidate source entries as CSL-JSON, fill_status="needs_review".
+  repeated SourceCandidate candidates = 2;
+  // Citation-source consistency warnings (FR-AI-14).
+  repeated CitationWarning warnings = 3;
+  bool done = 4;
+}
+
+message SourceCandidate {
+  string csl_json = 1;
+  string title = 2;
+  string authors = 3;
+  string year = 4;
+  string url = 5;
+}
+
+message CitationWarning {
+  string claim = 1;
+  string source_title = 2;
+  string message = 3;
+}
+
+// ── Reference parsing (FR-AI-13) ────────────────────────────────────
+
+message ParseReferenceRequest {
+  string user_id = 1;
+  // Freeform pasted reference string.
+  string raw_text = 2;
+}
+
+message ParseReferenceResponse {
+  // Parsed CSL-JSON, fill_status="needs_review".
+  string csl_json = 1;
+  string title = 2;
+  string authors = 3;
+  string year = 4;
+  bool confidence = 5;
+}
+
+// ── Health ──────────────────────────────────────────────────────────
+
+message PingRequest {}
+
+message PingResponse {
+  string status = 1;
+  string provider = 2;
+  string model = 3;
+}

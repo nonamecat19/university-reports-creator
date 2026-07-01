@@ -1,5 +1,5 @@
-.PHONY: help env-setup certs build build-auth build-document build-files build-gateway generate dev \
-dev-auth dev-document dev-files dev-gateway \
+.PHONY: help env-setup certs build build-auth build-document build-files build-gateway build-ai generate dev \
+dev-auth dev-document dev-files dev-gateway dev-ai \
 infra-up infra-down infra-logs \
 k8s-up k8s-down k8s-deploy k8s-delete k8s-logs k8s-port-forward k8s-build k8s-load-images clean
 
@@ -15,6 +15,7 @@ env-setup: ## Copy .env.example to .env for all services
 	@cp -n service-document/.env.example service-document/.env || true
 	@cp -n service-files/.env.example service-files/.env || true
 	@cp -n service-gateway/.env.example service-gateway/.env || true
+	@cp -n service-ai/.env.example service-ai/.env || true
 	@echo "Created .env files from .env.example"
 
 certs: ## Generate a local dev RS256 keypair for JWT signing (FR-AUTH-03)
@@ -31,7 +32,7 @@ certs: ## Generate a local dev RS256 keypair for JWT signing (FR-AUTH-03)
 # Build (manual, rarely needed)
 # ============================================================================
 
-build: build-auth build-document build-files build-gateway ## Build all services
+build: build-auth build-document build-files build-gateway build-ai ## Build all services
 
 build-auth:
 	go work sync && CGO_ENABLED=0 go build -o dist/service-auth ./service-auth/cmd/server
@@ -44,6 +45,9 @@ build-files:
 
 build-gateway:
 	go work sync && CGO_ENABLED=0 go build -o dist/service-gateway ./service-gateway/cmd/server
+
+build-ai: ## Build service-ai
+	cd service-ai && uv run python -c "from ai.__main__ import generate_proto_stubs; generate_proto_stubs()"
 
 # ============================================================================
 # Generate
@@ -60,7 +64,7 @@ generate: proto ## Generate protobuf and tidy modules
 # Local Development (Air) - primary workflow
 # ============================================================================
 
-dev: dev-auth dev-document dev-files dev-gateway ## Run all services with hot reload
+dev: dev-auth dev-document dev-files dev-gateway dev-ai ## Run all services with hot reload
 
 dev-auth: ## Run auth service with hot reload
 	cd service-auth && air -c air.toml
@@ -73,6 +77,9 @@ dev-files: ## Run files service with hot reload
 
 dev-gateway: ## Run gateway service with hot reload
 	cd service-gateway && air -c air.toml
+
+dev-ai: ## Run service-ai with hot reload
+	cd service-ai && uv run python -m ai
 
 # ============================================================================
 # Infrastructure (Docker Compose)
@@ -120,12 +127,14 @@ k8s-build: ## Build Docker images for K8s
 	docker build -t university-reports-creator/service-document:latest -f service-document/Dockerfile .
 	docker build -t university-reports-creator/service-files:latest -f service-files/Dockerfile .
 	docker build -t university-reports-creator/service-gateway:latest -f service-gateway/Dockerfile .
+	docker build -t university-reports-creator/service-ai:latest -f service-ai/Dockerfile .
 
 k8s-load-images: ## Load images into k3d
 	k3d image import university-reports-creator/service-auth:latest -c $(K8S_CLUSTER)
 	k3d image import university-reports-creator/service-document:latest -c $(K8S_CLUSTER)
 	k3d image import university-reports-creator/service-files:latest -c $(K8S_CLUSTER)
 	k3d image import university-reports-creator/service-gateway:latest -c $(K8S_CLUSTER)
+	k3d image import university-reports-creator/service-ai:latest -c $(K8S_CLUSTER)
 
 k8s-delete: ## Delete deployment
 	kubectl delete namespace $(K8S_NAMESPACE) --cascade=foreground 2>/dev/null || true
