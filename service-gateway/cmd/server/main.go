@@ -48,8 +48,13 @@ func main() {
 		slog.Error("failed to dial service-files", "error", err)
 		os.Exit(1)
 	}
+	aiConn, err := dialBackend(cfg.ServiceAI)
+	if err != nil {
+		slog.Error("failed to dial service-ai", "error", err)
+		os.Exit(1)
+	}
 
-	backends := proxy.Backends{Auth: authConn, Document: docConn, Files: filesConn}
+	backends := proxy.Backends{Auth: authConn, Document: docConn, Files: filesConn, AI: aiConn}
 	director := proxy.NewDirector(backends, pubKey)
 
 	grpcServer := grpc.NewServer(

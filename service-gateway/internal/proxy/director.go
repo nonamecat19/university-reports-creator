@@ -35,6 +35,7 @@ type Backends struct {
 	Auth     *grpc.ClientConn // auth.AuthService
 	Document *grpc.ClientConn // document.DocumentService, template.TemplateService
 	Files    *grpc.ClientConn // file.FileService
+	AI       *grpc.ClientConn // ai.AIService
 }
 
 func (b Backends) forMethod(fullMethod string) (*grpc.ClientConn, error) {
@@ -49,6 +50,8 @@ func (b Backends) forMethod(fullMethod string) (*grpc.ClientConn, error) {
 		return b.Document, nil
 	case "file":
 		return b.Files, nil
+	case "ai":
+		return b.AI, nil
 	default:
 		return nil, status.Errorf(codes.Unimplemented, "unknown service package %q", pkg)
 	}

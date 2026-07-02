@@ -10,6 +10,7 @@ type Config struct {
 	ServiceAuth      string `env:"SERVICE_AUTH" envDefault:"localhost:50051"`
 	ServiceDocument  string `env:"SERVICE_DOCUMENT" envDefault:"localhost:50052"`
 	ServiceFiles     string `env:"SERVICE_FILES" envDefault:"localhost:50053"`
+	ServiceAI        string `env:"SERVICE_AI" envDefault:"localhost:50055"`
 	ClientOrigin     string `env:"CLIENT_ORIGIN" envDefault:"http://localhost:4200"`
 }
 
