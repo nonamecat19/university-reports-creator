@@ -7,6 +7,7 @@ import { ProjectDetailComponent } from './app/features/projects/project-detail.c
 import { ProjectsListComponent } from './app/features/projects/projects-list.component';
 import { TemplateDetailComponent } from './app/features/templates/template-detail.component';
 import { TemplatesListComponent } from './app/features/templates/templates-list.component';
+import { SettingsComponent } from './app/features/settings/settings.component';
 import { LayoutComponent } from './app/layout/layout.component';
 
 export const routes: Routes = [
@@ -83,7 +84,7 @@ export const routes: Routes = [
       },
       {
         path: 'settings',
-        component: DashboardComponent,
+        component: SettingsComponent,
       },
     ],
   },

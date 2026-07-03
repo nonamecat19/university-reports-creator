@@ -1,0 +1,207 @@
+{
+  "brand": "UniReports",
+
+  "sidebar": {
+    "dashboard": "Головна",
+    "documents": "Документи",
+    "projects": "Проєкти",
+    "templates": "Шаблони",
+    "universities": "Університети",
+    "reports": "Звіти",
+    "team": "Команда",
+    "settings": "Налаштування"
+  },
+
+  "header": {
+    "account": "Обліковий запис",
+    "profile": "Профіль",
+    "settings": "Налаштування",
+    "logout": "Вийти",
+    "user_fallback": "Користувач"
+  },
+
+  "login": {
+    "create_account": "Створіть обліковий запис",
+    "sign_in_account": "Увійдіть до свого облікового запису",
+    "enter_email_password": "Будь ласка, введіть електронну пошту та пароль",
+    "enter_name": "Будь ласка, введіть ваше ім'я",
+    "could_not_create_account": "Не вдалося створити обліковий запис",
+    "invalid_credentials": "Невірна електронна пошта або пароль",
+    "google_signin_failed": "Не вдалося увійти через Google",
+    "name": "Ім'я",
+    "name_placeholder": "Введіть ваше ім'я",
+    "email": "Електронна пошта",
+    "email_placeholder": "Введіть вашу електронну пошту",
+    "password": "Пароль",
+    "password_placeholder": "Введіть ваш пароль",
+    "forgot_password": "Забули пароль?",
+    "create_account_btn": "Створити обліковий запис",
+    "sign_in": "Увійти",
+    "or": "або",
+    "continue_google": "Продовжити з Google",
+    "no_account": "Немає облікового запису?",
+    "create_one": "Створіть",
+    "has_account": "Вже маєте обліковий запис?",
+    "sign_in_link": "Увійти"
+  },
+
+  "dashboard": {
+    "welcome_back": "Вітаємо, {{name}}",
+    "subtitle": "Ось що відбувається з вашими звітами",
+    "new_project": "Новий проєкт",
+    "active_projects": "Активні проєкти",
+    "completed": "Завершено",
+    "under_review": "На перевірці",
+    "templates": "Шаблони",
+    "recent_projects": "Останні проєкти",
+    "no_recent_projects": "Немає нещодавніх проєктів",
+    "view_all": "Переглянути все",
+    "popular_templates": "Популярні шаблони",
+    "no_templates_available": "Шаблони відсутні",
+    "uses": "{{count}} використань"
+  },
+
+  "documents": {
+    "title": "Документи",
+    "new_document": "Новий документ",
+    "loading": "Завантаження…",
+    "empty_state": "Документів ще немає. Створіть свій перший звіт.",
+    "updated": "Оновлено",
+    "new_document_dialog": "Новий документ",
+    "rename_document_dialog": "Перейменувати документ",
+    "title_label": "Назва",
+    "cancel": "Скасувати",
+    "create": "Створити",
+    "save": "Зберегти"
+  },
+
+  "projects": {
+    "title": "Проєкти",
+    "subtitle": "Керуйте вашими проєктами університетських звітів",
+    "new_project": "Новий проєкт",
+    "total_projects": "Усього проєктів",
+    "in_progress": "В роботі",
+    "under_review": "На перевірці",
+    "completed": "Завершено",
+    "search_placeholder": "Пошук проєктів...",
+    "all_statuses": "Усі статуси",
+    "reports": "{{count}} звітів",
+    "due": "Дедлайн:",
+    "updated": "Оновлено",
+    "view": "Переглянути",
+    "no_projects_found": "Проєктів не знайдено",
+    "try_adjusting": "Спробуйте змінити пошуковий запит або фільтри",
+    "today": "сьогодні",
+    "yesterday": "вчора",
+    "days_ago": "{{count}} днів тому",
+    "weeks_ago": "{{count}} тижнів тому",
+    "months_ago": "{{count}} місяців тому",
+    "status": {
+      "draft": "Чернетка",
+      "in_progress": "В роботі",
+      "under_review": "На перевірці",
+      "completed": "Завершено",
+      "archived": "В архіві"
+    }
+  },
+
+  "project_detail": {
+    "edit_project": "Редагувати проєкт",
+    "new_report": "Новий звіт",
+    "project_overview": "Огляд проєкту",
+    "current_status": "Поточний статус",
+    "timeline": "Хронологія",
+    "created": "Створено",
+    "last_updated": "Останнє оновлення",
+    "due_date": "Дата здачі",
+    "overdue": "Прострочено",
+    "reports": "Звіти ({{count}})",
+    "version": "Версія {{version}}",
+    "updated": "Оновлено",
+    "no_reports": "Звітів ще немає",
+    "create_first_report": "Створити перший звіт",
+    "activity": "Активність",
+    "team": "Команда",
+    "project_lead": "Керівник проєкту",
+    "contributor": "Учасник",
+    "invite_member": "Запросити учасника",
+    "project_not_found": "Проєкт не знайдено",
+    "back_to_projects": "Повернутися до проєктів",
+    "activity_created": "Створено",
+    "activity_status_changed": "Статус змінено",
+    "activity_report_added": "Звіт додано"
+  },
+
+  "templates": {
+    "title": "Шаблони",
+    "subtitle": "Керуйте шаблонами звітів для ваших університетських звітів",
+    "new_template": "Новий шаблон",
+    "search_placeholder": "Пошук шаблонів...",
+    "all_categories": "Усі категорії",
+    "fields": "{{count}} полів",
+    "uses": "{{count}} використань",
+    "private": "Приватний",
+    "view": "Переглянути",
+    "no_templates_found": "Шаблонів не знайдено",
+    "try_adjusting": "Спробуйте змінити пошуковий запит або фільтри",
+    "category": {
+      "annual": "Річні",
+      "annual_reports": "Річні звіти",
+      "research": "Наукові",
+      "accreditation": "Акредитація",
+      "compliance": "Відповідність",
+      "custom": "Інше"
+    }
+  },
+
+  "template_detail": {
+    "edit_template": "Редагувати шаблон",
+    "use_template": "Використати шаблон",
+    "template_info": "Інформація про шаблон",
+    "category": "Категорія",
+    "visibility": "Видимість",
+    "public": "Публічний",
+    "private": "Приватний",
+    "author": "Автор",
+    "usage_count": "Кількість використань",
+    "times": "{{count}} разів",
+    "created": "Створено",
+    "last_updated": "Останнє оновлення",
+    "form_fields": "Поля форми ({{count}})",
+    "required": "Обов'язкове",
+    "options": "{{count}} опцій",
+    "template_not_found": "Шаблон не знайдено",
+    "back_to_templates": "Повернутися до шаблонів",
+    "field_type": {
+      "text": "Текст",
+      "textarea": "Текстове поле",
+      "number": "Число",
+      "date": "Дата",
+      "select": "Вибір",
+      "multi_select": "Мульти-вибір",
+      "checkbox": "Прапорець",
+      "file_upload": "Завантаження файлу",
+      "rich_text": "Форматований текст"
+    }
+  },
+
+  "settings": {
+    "title": "Налаштування",
+    "language": "Мова",
+    "language_description": "Оберіть бажану мову інтерфейсу",
+    "english": "English",
+    "ukrainian": "Українська"
+  },
+
+  "common": {
+    "cancel": "Скасувати",
+    "save": "Зберегти",
+    "create": "Створити",
+    "delete": "Видалити",
+    "edit": "Редагувати",
+    "view": "Переглянути",
+    "loading": "Завантаження…",
+    "search": "Пошук",
+    "no_data": "Дані відсутні"
+  }
+}
