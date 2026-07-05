@@ -1,31 +1,101 @@
 import { Component, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import type { MenuItem } from 'primeng/api';
-
-interface NavItem extends MenuItem {
-  icon: string;
-  route: string;
-}
+import { TranslatePipe } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-sidebar',
-  imports: [RouterLink, RouterLinkActive],
+  imports: [RouterLink, RouterLinkActive, TranslatePipe],
   template: `
     <aside class="sidebar" [class.collapsed]="collapsed()">
       <nav class="nav">
-        @for (item of navItems; track item.route) {
-          <a
-            class="nav-item"
-            [routerLink]="item.route"
-            routerLinkActive="active"
-            [title]="item.label"
-          >
-            <i [class]="item.icon"></i>
-            @if (!collapsed()) {
-              <span class="nav-label">{{ item.label }}</span>
-            }
-          </a>
-        }
+        <a
+          class="nav-item"
+          routerLink="/dashboard"
+          routerLinkActive="active"
+          [title]="'sidebar.dashboard' | translate"
+        >
+          <i class="pi pi-home"></i>
+          @if (!collapsed()) {
+            <span class="nav-label">{{ 'sidebar.dashboard' | translate }}</span>
+          }
+        </a>
+        <a
+          class="nav-item"
+          routerLink="/documents"
+          routerLinkActive="active"
+          [title]="'sidebar.documents' | translate"
+        >
+          <i class="pi pi-file-edit"></i>
+          @if (!collapsed()) {
+            <span class="nav-label">{{ 'sidebar.documents' | translate }}</span>
+          }
+        </a>
+        <a
+          class="nav-item"
+          routerLink="/projects"
+          routerLinkActive="active"
+          [title]="'sidebar.projects' | translate"
+        >
+          <i class="pi pi-briefcase"></i>
+          @if (!collapsed()) {
+            <span class="nav-label">{{ 'sidebar.projects' | translate }}</span>
+          }
+        </a>
+        <a
+          class="nav-item"
+          routerLink="/templates"
+          routerLinkActive="active"
+          [title]="'sidebar.templates' | translate"
+        >
+          <i class="pi pi-file"></i>
+          @if (!collapsed()) {
+            <span class="nav-label">{{ 'sidebar.templates' | translate }}</span>
+          }
+        </a>
+        <a
+          class="nav-item"
+          routerLink="/universities"
+          routerLinkActive="active"
+          [title]="'sidebar.universities' | translate"
+        >
+          <i class="pi pi-building"></i>
+          @if (!collapsed()) {
+            <span class="nav-label">{{ 'sidebar.universities' | translate }}</span>
+          }
+        </a>
+        <a
+          class="nav-item"
+          routerLink="/reports"
+          routerLinkActive="active"
+          [title]="'sidebar.reports' | translate"
+        >
+          <i class="pi pi-chart-bar"></i>
+          @if (!collapsed()) {
+            <span class="nav-label">{{ 'sidebar.reports' | translate }}</span>
+          }
+        </a>
+        <a
+          class="nav-item"
+          routerLink="/team"
+          routerLinkActive="active"
+          [title]="'sidebar.team' | translate"
+        >
+          <i class="pi pi-users"></i>
+          @if (!collapsed()) {
+            <span class="nav-label">{{ 'sidebar.team' | translate }}</span>
+          }
+        </a>
+        <a
+          class="nav-item"
+          routerLink="/settings"
+          routerLinkActive="active"
+          [title]="'sidebar.settings' | translate"
+        >
+          <i class="pi pi-cog"></i>
+          @if (!collapsed()) {
+            <span class="nav-label">{{ 'sidebar.settings' | translate }}</span>
+          }
+        </a>
       </nav>
 
       <button
@@ -113,17 +183,6 @@ interface NavItem extends MenuItem {
 })
 export class SidebarComponent {
   protected readonly collapsed = signal<boolean>(false);
-
-  protected readonly navItems: NavItem[] = [
-    { label: 'Dashboard', icon: 'pi pi-home', route: '/dashboard' },
-    { label: 'Documents', icon: 'pi pi-file-edit', route: '/documents' },
-    { label: 'Projects', icon: 'pi pi-briefcase', route: '/projects' },
-    { label: 'Templates', icon: 'pi pi-file', route: '/templates' },
-    { label: 'Universities', icon: 'pi pi-building', route: '/universities' },
-    { label: 'Reports', icon: 'pi pi-chart-bar', route: '/reports' },
-    { label: 'Team', icon: 'pi pi-users', route: '/team' },
-    { label: 'Settings', icon: 'pi pi-cog', route: '/settings' },
-  ];
 
   toggleCollapse(): void {
     this.collapsed.update((v) => !v);

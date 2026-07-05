@@ -3,24 +3,42 @@
     <button type="button" class="menu-toggle" (click)="toggleSidebar()">
       <i class="pi pi-bars"></i>
     </button>
-    <span class="logo">UniReports</span>
+    <span class="logo">{{ 'brand' | translate }}</span>
   </div>
   <div class="header-right">
     <button type="button" class="icon-btn">
       <i class="pi pi-bell"></i>
     </button>
-    <div class="user-menu" (click)="menu.toggle($event)">
+    <div class="user-menu" (click)="toggleMenu()">
       <p-avatar
         [label]="userInitial()"
         shape="circle"
         size="normal"
       />
       <div class="user-info">
-        <span class="user-name">{{ user()?.name ?? 'User' }}</span>
+        <span class="user-name">{{ user()?.name ?? ('header.user_fallback' | translate) }}</span>
         <span class="user-email">{{ user()?.email }}</span>
       </div>
       <i class="pi pi-chevron-down"></i>
     </div>
-    <p-menu #menu [model]="menuItems" [popup]="true" />
+
+    @if (menuOpen()) {
+      <div class="menu-dropdown">
+        <div class="menu-header">{{ 'header.account' | translate }}</div>
+        <button type="button" class="menu-item" (click)="navigateToSettings()">
+          <i class="pi pi-id-card"></i>
+          <span>{{ 'header.profile' | translate }}</span>
+        </button>
+        <button type="button" class="menu-item" (click)="navigateToSettings()">
+          <i class="pi pi-cog"></i>
+          <span>{{ 'header.settings' | translate }}</span>
+        </button>
+        <div class="menu-divider"></div>
+        <button type="button" class="menu-item logout" (click)="logout()">
+          <i class="pi pi-sign-out"></i>
+          <span>{{ 'header.logout' | translate }}</span>
+        </button>
+      </div>
+    }
   </div>
 </header>

@@ -5,5 +5,13 @@
     <main class="layout-content">
       <router-outlet />
     </main>
+    @if (aiPanelVisible()) {
+      <aside class="ai-panel">
+        <app-ai-tab />
+      </aside>
+    }
+    <button class="ai-toggle" (click)="toggleAiPanel()" [class.active]="aiPanelVisible()">
+      <i class="pi pi-sparkles"></i>
+    </button>
   </div>
 </div>
