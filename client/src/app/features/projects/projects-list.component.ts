@@ -8,21 +8,22 @@ import { InputText } from 'primeng/inputtext';
 import { Select } from 'primeng/select';
 import { Tag } from 'primeng/tag';
 import { Badge } from 'primeng/badge';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ProjectService } from './project.service';
 import type { Project, ProjectStatus } from '../../shared/models/project.model';
 import { ProjectStatus as Status } from '../../shared/models/project.model';
 
 @Component({
   selector: 'app-projects-list',
-  imports: [DatePipe, FormsModule, RouterLink, Card, Button, InputText, Select, Tag, Badge],
+  imports: [DatePipe, FormsModule, RouterLink, Card, Button, InputText, Select, Tag, Badge, TranslatePipe],
   template: `
     <div class="page-header">
       <div class="header-content">
-        <h1>Projects</h1>
-        <p>Manage your university report projects</p>
+        <h1>{{ 'projects.title' | translate }}</h1>
+        <p>{{ 'projects.subtitle' | translate }}</p>
       </div>
       <p-button
-        label="New Project"
+        [label]="'projects.new_project' | translate"
         icon="pi pi-plus"
         severity="primary"
       />
@@ -31,19 +32,19 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
     <div class="stats-grid">
       <div class="stat-card">
         <p-badge [value]="totalCount()" severity="info" />
-        <span class="stat-label">Total Projects</span>
+        <span class="stat-label">{{ 'projects.total_projects' | translate }}</span>
       </div>
       <div class="stat-card">
         <p-badge [value]="activeCount()" severity="success" />
-        <span class="stat-label">In Progress</span>
+        <span class="stat-label">{{ 'projects.in_progress' | translate }}</span>
       </div>
       <div class="stat-card">
         <p-badge [value]="pendingCount()" severity="warn" />
-        <span class="stat-label">Under Review</span>
+        <span class="stat-label">{{ 'projects.under_review' | translate }}</span>
       </div>
       <div class="stat-card">
         <p-badge [value]="completedCount()" severity="secondary" />
-        <span class="stat-label">Completed</span>
+        <span class="stat-label">{{ 'projects.completed' | translate }}</span>
       </div>
     </div>
 
@@ -54,13 +55,13 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
           pInputText
           [(ngModel)]="searchQuery"
           (ngModelChange)="filterProjects()"
-          placeholder="Search projects..."
+          [placeholder]="'projects.search_placeholder' | translate"
         />
       </span>
       <p-select
         [(ngModel)]="selectedStatus"
         [options]="statusOptions"
-        placeholder="All Statuses"
+        [placeholder]="'projects.all_statuses' | translate"
         (ngModelChange)="filterProjects()"
       />
     </div>
@@ -80,7 +81,7 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
             </div>
             <div class="project-status">
               <p-tag
-                [value]="getStatusLabel(project.status)"
+                [value]="'projects.status.' + project.status | translate"
                 [severity]="getStatusSeverity(project.status)"
               />
             </div>
@@ -89,15 +90,15 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
           <div class="project-meta">
             <div class="meta-item">
               <i class="pi pi-file"></i>
-              <span>{{ project.reports.length }} reports</span>
+              <span>{{ 'projects.reports' | translate: { count: project.reports.length } }}</span>
             </div>
             <div class="meta-item">
               <i class="pi pi-calendar"></i>
-              <span>Due: {{ project.dueDate | date: 'shortDate' }}</span>
+              <span>{{ 'projects.due' | translate }} {{ project.dueDate | date: 'shortDate' }}</span>
             </div>
             <div class="meta-item">
               <i class="pi pi-clock"></i>
-              <span>Updated {{ getRelativeTime(project.updatedAt) }}</span>
+              <span>{{ 'projects.updated' | translate }} {{ getRelativeTime(project.updatedAt) | translate }}</span>
             </div>
           </div>
 
@@ -105,7 +106,7 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
             <div class="card-actions">
               <p-button
                 [routerLink]="['/projects', project.id]"
-                label="View"
+                [label]="'projects.view' | translate"
                 severity="secondary"
                 [outlined]="true"
               />
@@ -126,8 +127,8 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
       } @empty {
         <div class="empty-state">
           <i class="pi pi-briefcase"></i>
-          <h3>No projects found</h3>
-          <p>Try adjusting your search or filters</p>
+          <h3>{{ 'projects.no_projects_found' | translate }}</h3>
+          <p>{{ 'projects.try_adjusting' | translate }}</p>
         </div>
       }
     </div>
@@ -278,6 +279,7 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
 })
 export class ProjectsListComponent {
   private readonly projectService = inject(ProjectService);
+  private readonly translate = inject(TranslateService);
 
   protected searchQuery = '';
   protected selectedStatus: ProjectStatus | null = null;
@@ -290,11 +292,11 @@ export class ProjectsListComponent {
   protected readonly completedCount = computed(() => this.stats.completed());
 
   protected readonly statusOptions = [
-    { label: 'Draft', value: Status.Draft },
-    { label: 'In Progress', value: Status.InProgress },
-    { label: 'Under Review', value: Status.UnderReview },
-    { label: 'Completed', value: Status.Completed },
-    { label: 'Archived', value: Status.Archived },
+    { label: this.translate.instant('projects.status.draft'), value: Status.Draft },
+    { label: this.translate.instant('projects.status.in_progress'), value: Status.InProgress },
+    { label: this.translate.instant('projects.status.under_review'), value: Status.UnderReview },
+    { label: this.translate.instant('projects.status.completed'), value: Status.Completed },
+    { label: this.translate.instant('projects.status.archived'), value: Status.Archived },
   ];
 
   constructor() {
@@ -321,17 +323,6 @@ export class ProjectsListComponent {
     this.filteredProjects.set(projects);
   }
 
-  getStatusLabel(status: ProjectStatus): string {
-    const labels: Record<ProjectStatus, string> = {
-      [Status.Draft]: 'Draft',
-      [Status.InProgress]: 'In Progress',
-      [Status.UnderReview]: 'Under Review',
-      [Status.Completed]: 'Completed',
-      [Status.Archived]: 'Archived',
-    };
-    return labels[status] ?? status;
-  }
-
   getStatusSeverity(
     status: ProjectStatus
   ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
@@ -353,10 +344,10 @@ export class ProjectsListComponent {
     const diffMs = now.getTime() - date.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    if (diffDays === 0) return 'today';
-    if (diffDays === 1) return 'yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    return `${Math.floor(diffDays / 30)} months ago`;
+    if (diffDays === 0) return 'projects.today';
+    if (diffDays === 1) return 'projects.yesterday';
+    if (diffDays < 7) return 'projects.days_ago';
+    if (diffDays < 30) return 'projects.weeks_ago';
+    return 'projects.months_ago';
   }
 }

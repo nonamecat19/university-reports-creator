@@ -7,16 +7,25 @@ import { InputText } from 'primeng/inputtext';
 import { Message } from 'primeng/message';
 import { Password } from 'primeng/password';
 import { AuthService } from '../../../core/services/auth.service';
+import { LanguageService } from '../../../core/services/language.service';
 
 @Component({
   selector: 'app-login',
-  imports: [FormsModule, Card, InputText, Password, Button, Message],
+  imports: [
+    FormsModule,
+    Card,
+    InputText,
+    Password,
+    Button,
+    Message,
+  ],
   templateUrl: './login.component.html',
   styleUrl: './login.component.css',
 })
 export class LoginComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly langService = inject(LanguageService);
 
   protected email = '';
   protected password = '';
@@ -24,21 +33,27 @@ export class LoginComponent {
   protected readonly mode = signal<'login' | 'register'>('login');
   protected readonly isLoading = this.authService.isLoading;
   protected readonly errorMessage = signal<string>('');
+  protected readonly currentLang = signal(this.langService.current);
 
   toggleMode(): void {
     this.mode.set(this.mode() === 'login' ? 'register' : 'login');
     this.errorMessage.set('');
   }
 
+  setLanguage(code: string): void {
+    this.langService.setLanguage(code);
+    this.currentLang.set(code);
+  }
+
   async onSubmit(): Promise<void> {
     this.errorMessage.set('');
 
     if (!this.email || !this.password) {
-      this.errorMessage.set('Please enter email and password');
+      this.errorMessage.set('login.enter_email_password');
       return;
     }
     if (this.mode() === 'register' && !this.name) {
-      this.errorMessage.set('Please enter your name');
+      this.errorMessage.set('login.enter_name');
       return;
     }
 
@@ -55,7 +70,7 @@ export class LoginComponent {
       this.router.navigate(['/dashboard']);
     } else {
       this.errorMessage.set(
-        this.mode() === 'register' ? 'Could not create account' : 'Invalid email or password'
+        this.mode() === 'register' ? 'login.could_not_create_account' : 'login.invalid_credentials',
       );
     }
   }
@@ -64,7 +79,7 @@ export class LoginComponent {
     this.errorMessage.set('');
     const success = await this.authService.signInWithGoogle();
     if (!success) {
-      this.errorMessage.set('Failed to sign in with Google');
+      this.errorMessage.set('login.google_signin_failed');
     }
   }
 }

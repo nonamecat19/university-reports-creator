@@ -7,21 +7,22 @@ import { InputText } from 'primeng/inputtext';
 import { Select } from 'primeng/select';
 import { Tag } from 'primeng/tag';
 import { Badge } from 'primeng/badge';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TemplateService } from './template.service';
 import type { Template, TemplateCategory } from '../../shared/models/template.model';
 import { TemplateCategory as Category } from '../../shared/models/template.model';
 
 @Component({
   selector: 'app-templates-list',
-  imports: [FormsModule, RouterLink, Card, Button, InputText, Select, Tag, Badge],
+  imports: [FormsModule, RouterLink, Card, Button, InputText, Select, Tag, Badge, TranslatePipe],
   template: `
     <div class="page-header">
       <div class="header-content">
-        <h1>Templates</h1>
-        <p>Manage report templates for your university reports</p>
+        <h1>{{ 'templates.title' | translate }}</h1>
+        <p>{{ 'templates.subtitle' | translate }}</p>
       </div>
       <p-button
-        label="New Template"
+        [label]="'templates.new_template' | translate"
         icon="pi pi-plus"
         severity="primary"
       />
@@ -34,13 +35,13 @@ import { TemplateCategory as Category } from '../../shared/models/template.model
           pInputText
           [(ngModel)]="searchQuery"
           (ngModelChange)="filterTemplates()"
-          placeholder="Search templates..."
+          [placeholder]="'templates.search_placeholder' | translate"
         />
       </span>
       <p-select
         [(ngModel)]="selectedCategory"
         [options]="categoryOptions"
-        placeholder="All Categories"
+        [placeholder]="'templates.all_categories' | translate"
         (ngModelChange)="filterTemplates()"
       />
     </div>
@@ -51,7 +52,7 @@ import { TemplateCategory as Category } from '../../shared/models/template.model
           <ng-template #title>{{ template.name }}</ng-template>
           <ng-template #subtitle>
             <p-tag
-              [value]="getCategoryLabel(template.category)"
+              [value]="'templates.category.' + template.category | translate"
               [severity]="getCategorySeverity(template.category)"
             />
           </ng-template>
@@ -61,21 +62,21 @@ import { TemplateCategory as Category } from '../../shared/models/template.model
           <div class="template-meta">
             <div class="meta-item">
               <i class="pi pi-file"></i>
-              <span>{{ template.fields.length }} fields</span>
+              <span>{{ 'templates.fields' | translate: { count: template.fields.length } }}</span>
             </div>
             <div class="meta-item">
               <i class="pi pi-users"></i>
-              <span>{{ template.usageCount }} uses</span>
+              <span>{{ 'templates.uses' | translate: { count: template.usageCount } }}</span>
             </div>
             @if (!template.isPublic) {
-              <p-badge value="Private" severity="secondary" />
+              <p-badge [value]="'templates.private' | translate" severity="secondary" />
             }
           </div>
 
           <ng-template #footer>
             <div class="card-actions">
               <p-button
-                label="View"
+                [label]="'templates.view' | translate"
                 severity="secondary"
                 [outlined]="true"
                 [routerLink]="['/templates', template.id]"
@@ -97,8 +98,8 @@ import { TemplateCategory as Category } from '../../shared/models/template.model
       } @empty {
         <div class="empty-state">
           <i class="pi pi-file"></i>
-          <h3>No templates found</h3>
-          <p>Try adjusting your search or filters</p>
+          <h3>{{ 'templates.no_templates_found' | translate }}</h3>
+          <p>{{ 'templates.try_adjusting' | translate }}</p>
         </div>
       }
     </div>
@@ -212,17 +213,18 @@ import { TemplateCategory as Category } from '../../shared/models/template.model
 })
 export class TemplatesListComponent {
   private readonly templateService = inject(TemplateService);
+  private readonly translate = inject(TranslateService);
 
   protected searchQuery = '';
   protected selectedCategory: TemplateCategory | null = null;
   protected readonly filteredTemplates = signal<Template[]>([]);
 
   protected readonly categoryOptions = [
-    { label: 'Annual Reports', value: Category.Annual },
-    { label: 'Research', value: Category.Research },
-    { label: 'Accreditation', value: Category.Accreditation },
-    { label: 'Compliance', value: Category.Compliance },
-    { label: 'Custom', value: Category.Custom },
+    { label: this.translate.instant('templates.category.annual'), value: Category.Annual },
+    { label: this.translate.instant('templates.category.research'), value: Category.Research },
+    { label: this.translate.instant('templates.category.accreditation'), value: Category.Accreditation },
+    { label: this.translate.instant('templates.category.compliance'), value: Category.Compliance },
+    { label: this.translate.instant('templates.category.custom'), value: Category.Custom },
   ];
 
   constructor() {
@@ -244,17 +246,6 @@ export class TemplatesListComponent {
     }
 
     this.filteredTemplates.set(templates);
-  }
-
-  getCategoryLabel(category: TemplateCategory): string {
-    const labels: Record<TemplateCategory, string> = {
-      [Category.Annual]: 'Annual',
-      [Category.Research]: 'Research',
-      [Category.Accreditation]: 'Accreditation',
-      [Category.Compliance]: 'Compliance',
-      [Category.Custom]: 'Custom',
-    };
-    return labels[category] ?? category;
   }
 
   getCategorySeverity(

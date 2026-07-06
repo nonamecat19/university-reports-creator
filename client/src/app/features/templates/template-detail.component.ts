@@ -6,13 +6,14 @@ import { Button } from 'primeng/button';
 import { Tag } from 'primeng/tag';
 import { Divider } from 'primeng/divider';
 import { Tag as TagComponent } from 'primeng/tag';
+import { TranslatePipe } from '@ngx-translate/core';
 import { TemplateService } from './template.service';
 import type { Template } from '../../shared/models/template.model';
 import { FieldType } from '../../shared/models/template.model';
 
 @Component({
   selector: 'app-template-detail',
-  imports: [DatePipe, RouterLink, Card, Button, TagComponent, Divider],
+  imports: [DatePipe, RouterLink, Card, Button, TagComponent, Divider, TranslatePipe],
   template: `
     <div class="page-header">
       <div class="header-content">
@@ -25,13 +26,13 @@ import { FieldType } from '../../shared/models/template.model';
       <div class="header-actions">
         <p-button
           [routerLink]="['/templates', template()?.id, 'edit']"
-          label="Edit Template"
+          [label]="'template_detail.edit_template' | translate"
           icon="pi pi-pencil"
           severity="secondary"
           [outlined]="true"
         />
         <p-button
-          label="Use Template"
+          [label]="'template_detail.use_template' | translate"
           icon="pi pi-plus"
           severity="primary"
           (onClick)="useTemplate()"
@@ -42,41 +43,41 @@ import { FieldType } from '../../shared/models/template.model';
     @if (template(); as t) {
       <div class="content-grid">
         <p-card styleClass="info-card">
-          <ng-template #title>Template Info</ng-template>
+          <ng-template #title>{{ 'template_detail.template_info' | translate }}</ng-template>
 
           <div class="info-grid">
             <div class="info-item">
-              <span class="label">Category</span>
+              <span class="label">{{ 'template_detail.category' | translate }}</span>
               <p-tag
-                [value]="getCategoryLabel(t.category)"
+                [value]="'templates.category.' + t.category | translate"
                 [severity]="getCategorySeverity(t.category)"
               />
             </div>
             <div class="info-item">
-              <span class="label">Visibility</span>
-              <p-tag [value]="t.isPublic ? 'Public' : 'Private'" />
+              <span class="label">{{ 'template_detail.visibility' | translate }}</span>
+              <p-tag [value]="(t.isPublic ? 'template_detail.public' : 'template_detail.private') | translate" />
             </div>
             <div class="info-item">
-              <span class="label">Author</span>
+              <span class="label">{{ 'template_detail.author' | translate }}</span>
               <span class="value">{{ t.authorName }}</span>
             </div>
             <div class="info-item">
-              <span class="label">Usage Count</span>
-              <span class="value">{{ t.usageCount }} times</span>
+              <span class="label">{{ 'template_detail.usage_count' | translate }}</span>
+              <span class="value">{{ 'template_detail.times' | translate: { count: t.usageCount } }}</span>
             </div>
             <div class="info-item">
-              <span class="label">Created</span>
+              <span class="label">{{ 'template_detail.created' | translate }}</span>
               <span class="value">{{ t.createdAt | date: 'mediumDate' }}</span>
             </div>
             <div class="info-item">
-              <span class="label">Last Updated</span>
+              <span class="label">{{ 'template_detail.last_updated' | translate }}</span>
               <span class="value">{{ t.updatedAt | date: 'mediumDate' }}</span>
             </div>
           </div>
         </p-card>
 
         <p-card styleClass="fields-card">
-          <ng-template #title>Form Fields ({{ t.fields.length }})</ng-template>
+          <ng-template #title>{{ 'template_detail.form_fields' | translate: { count: t.fields.length } }}</ng-template>
 
           <div class="fields-list">
             @for (field of t.fields; track field.id; let i = $index) {
@@ -84,13 +85,13 @@ import { FieldType } from '../../shared/models/template.model';
                 <span class="field-number">{{ i + 1 }}</span>
                 <div class="field-info">
                   <span class="field-name">{{ field.label }}</span>
-                  <span class="field-type">{{ getFieldTypeLabel(field.type) }}</span>
+                  <span class="field-type">{{ 'template_detail.field_type.' + field.type | translate }}</span>
                 </div>
                 @if (field.required) {
-                  <p-tag value="Required" severity="danger" />
+                  <p-tag [value]="'template_detail.required' | translate" severity="danger" />
                 }
                 @if (field.options?.length) {
-                  <p-tag [value]="(field.options?.length ?? 0) + ' options'" severity="info" />
+                  <p-tag [value]="'template_detail.options' | translate: { count: field.options?.length ?? 0 }" severity="info" />
                 }
               </div>
               @if (i < t.fields.length - 1) {
@@ -103,8 +104,8 @@ import { FieldType } from '../../shared/models/template.model';
     } @else {
       <div class="not-found">
         <i class="pi pi-file-not-found"></i>
-        <h2>Template not found</h2>
-        <p-button routerLink="/templates" label="Back to Templates" />
+        <h2>{{ 'template_detail.template_not_found' | translate }}</h2>
+        <p-button routerLink="/templates" [label]="'template_detail.back_to_templates' | translate" />
       </div>
     }
   `,
@@ -245,17 +246,6 @@ export class TemplateDetailComponent {
     console.log('Creating new report from template:', this.template()?.id);
   }
 
-  getCategoryLabel(category: string): string {
-    const labels: Record<string, string> = {
-      annual: 'Annual',
-      research: 'Research',
-      accreditation: 'Accreditation',
-      compliance: 'Compliance',
-      custom: 'Custom',
-    };
-    return labels[category] ?? category;
-  }
-
   getCategorySeverity(
     category: string
   ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
@@ -270,20 +260,5 @@ export class TemplateDetailComponent {
       custom: 'secondary',
     };
     return severities[category] ?? 'secondary';
-  }
-
-  getFieldTypeLabel(type: FieldType): string {
-    const labels: Record<FieldType, string> = {
-      [FieldType.Text]: 'Text',
-      [FieldType.Textarea]: 'Textarea',
-      [FieldType.Number]: 'Number',
-      [FieldType.Date]: 'Date',
-      [FieldType.Select]: 'Select',
-      [FieldType.MultiSelect]: 'Multi-Select',
-      [FieldType.Checkbox]: 'Checkbox',
-      [FieldType.File]: 'File Upload',
-      [FieldType.RichText]: 'Rich Text',
-    };
-    return labels[type] ?? type;
   }
 }

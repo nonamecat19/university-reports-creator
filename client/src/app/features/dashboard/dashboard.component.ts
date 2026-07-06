@@ -4,21 +4,22 @@ import { Card } from 'primeng/card';
 import { Button } from 'primeng/button';
 import { Avatar } from 'primeng/avatar';
 import { Tag } from 'primeng/tag';
+import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { ProjectService } from '../projects/project.service';
 import { TemplateService } from '../templates/template.service';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, Card, Button, Avatar, Tag],
+  imports: [RouterLink, Card, Button, Avatar, Tag, TranslatePipe],
   template: `
     <div class="page-header">
       <div class="header-content">
-        <h1>Welcome back, {{ userName() }}</h1>
-        <p>Here's what's happening with your reports</p>
+        <h1>{{ 'dashboard.welcome_back' | translate: { name: userName() } }}</h1>
+        <p>{{ 'dashboard.subtitle' | translate }}</p>
       </div>
       <p-button
-        label="New Project"
+        [label]="'dashboard.new_project' | translate"
         icon="pi pi-plus"
         severity="primary"
       />
@@ -32,7 +33,7 @@ import { TemplateService } from '../templates/template.service';
           </div>
           <div class="stat-info">
             <span class="stat-value">{{ projectStats().total }}</span>
-            <span class="stat-label">Active Projects</span>
+            <span class="stat-label">{{ 'dashboard.active_projects' | translate }}</span>
           </div>
         </div>
       </p-card>
@@ -44,7 +45,7 @@ import { TemplateService } from '../templates/template.service';
           </div>
           <div class="stat-info">
             <span class="stat-value">{{ projectStats().completed }}</span>
-            <span class="stat-label">Completed</span>
+            <span class="stat-label">{{ 'dashboard.completed' | translate }}</span>
           </div>
         </div>
       </p-card>
@@ -56,7 +57,7 @@ import { TemplateService } from '../templates/template.service';
           </div>
           <div class="stat-info">
             <span class="stat-value">{{ projectStats().pending }}</span>
-            <span class="stat-label">Under Review</span>
+            <span class="stat-label">{{ 'dashboard.under_review' | translate }}</span>
           </div>
         </div>
       </p-card>
@@ -68,7 +69,7 @@ import { TemplateService } from '../templates/template.service';
           </div>
           <div class="stat-info">
             <span class="stat-value">{{ recentTemplates() }}</span>
-            <span class="stat-label">Templates</span>
+            <span class="stat-label">{{ 'dashboard.templates' | translate }}</span>
           </div>
         </div>
       </p-card>
@@ -76,7 +77,7 @@ import { TemplateService } from '../templates/template.service';
 
     <div class="dashboard-grid">
       <p-card styleClass="recent-card">
-        <ng-template #title>Recent Projects</ng-template>
+        <ng-template #title>{{ 'dashboard.recent_projects' | translate }}</ng-template>
         <ng-template #content>
           <div class="project-list">
             @for (project of recentProjects(); track project.id) {
@@ -92,24 +93,24 @@ import { TemplateService } from '../templates/template.service';
                   </div>
                 </div>
                 <p-tag
-                  [value]="project.status.replace('_', ' ')"
+                  [value]="'projects.status.' + project.status | translate"
                   [severity]="getStatusSeverity(project.status)"
                 />
               </a>
             } @empty {
               <div class="empty-state">
-                <p>No recent projects</p>
+                <p>{{ 'dashboard.no_recent_projects' | translate }}</p>
               </div>
             }
           </div>
         </ng-template>
         <ng-template #footer>
-          <p-button routerLink="/projects" label="View All" severity="secondary" [text]="true" />
+          <p-button routerLink="/projects" [label]="'dashboard.view_all' | translate" severity="secondary" [text]="true" />
         </ng-template>
       </p-card>
 
       <p-card styleClass="templates-card">
-        <ng-template #title>Popular Templates</ng-template>
+        <ng-template #title>{{ 'dashboard.popular_templates' | translate }}</ng-template>
         <ng-template #content>
           <div class="template-list">
             @for (template of popularTemplates(); track template.id) {
@@ -118,20 +119,20 @@ import { TemplateService } from '../templates/template.service';
                   <i class="pi pi-file"></i>
                   <div class="template-details">
                     <span class="template-name">{{ template.name }}</span>
-                    <span class="template-usage">{{ template.usageCount }} uses</span>
+                    <span class="template-usage">{{ 'dashboard.uses' | translate: { count: template.usageCount } }}</span>
                   </div>
                 </div>
                 <i class="pi pi-chevron-right"></i>
               </a>
             } @empty {
               <div class="empty-state">
-                <p>No templates available</p>
+                <p>{{ 'dashboard.no_templates_available' | translate }}</p>
               </div>
             }
           </div>
         </ng-template>
         <ng-template #footer>
-          <p-button routerLink="/templates" label="View All" severity="secondary" [text]="true" />
+          <p-button routerLink="/templates" [label]="'dashboard.view_all' | translate" severity="secondary" [text]="true" />
         </ng-template>
       </p-card>
     </div>

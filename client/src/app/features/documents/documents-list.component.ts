@@ -5,23 +5,24 @@ import { Button } from 'primeng/button';
 import { Card } from 'primeng/card';
 import { Dialog } from 'primeng/dialog';
 import { InputText } from 'primeng/inputtext';
+import { TranslatePipe } from '@ngx-translate/core';
 import { DocumentService, type DocumentSummary } from '../../core/services/document.service';
 
 @Component({
   selector: 'app-documents-list',
-  imports: [FormsModule, Button, Card, Dialog, InputText, DatePipe],
+  imports: [FormsModule, Button, Card, Dialog, InputText, DatePipe, TranslatePipe],
   template: `
     <div class="documents-page">
       <div class="page-header">
-        <h1>Documents</h1>
-        <p-button label="New document" icon="pi pi-plus" (onClick)="openCreateDialog()" />
+        <h1>{{ 'documents.title' | translate }}</h1>
+        <p-button [label]="'documents.new_document' | translate" icon="pi pi-plus" (onClick)="openCreateDialog()" />
       </div>
 
       @if (documents.isLoading()) {
-        <p>Loading…</p>
+        <p>{{ 'documents.loading' | translate }}</p>
       } @else if (documents.documents().length === 0) {
         <p-card>
-          <p>No documents yet. Create your first report.</p>
+          <p>{{ 'documents.empty_state' | translate }}</p>
         </p-card>
       } @else {
         <div class="documents-grid">
@@ -30,7 +31,7 @@ import { DocumentService, type DocumentSummary } from '../../core/services/docum
               <ng-template #title>{{ doc.title }}</ng-template>
               <ng-template #subtitle>
                 @if (doc.updatedAt) {
-                  Updated {{ doc.updatedAt | date: 'medium' }}
+                  {{ 'documents.updated' | translate }} {{ doc.updatedAt | date: 'medium' }}
                 }
               </ng-template>
               <div class="card-actions">
@@ -43,25 +44,25 @@ import { DocumentService, type DocumentSummary } from '../../core/services/docum
       }
     </div>
 
-    <p-dialog header="New document" [(visible)]="createDialogVisible" [modal]="true" [style]="{ width: '28rem' }">
+    <p-dialog [header]="'documents.new_document_dialog' | translate" [(visible)]="createDialogVisible" [modal]="true" [style]="{ width: '28rem' }">
       <div class="field">
-        <label for="new-title">Title</label>
+        <label for="new-title">{{ 'documents.title_label' | translate }}</label>
         <input pInputText id="new-title" type="text" [(ngModel)]="newTitle" class="w-full" />
       </div>
       <div class="dialog-actions">
-        <p-button label="Cancel" severity="secondary" (onClick)="createDialogVisible.set(false)" />
-        <p-button label="Create" [disabled]="!newTitle" (onClick)="create()" />
+        <p-button [label]="'documents.cancel' | translate" severity="secondary" (onClick)="createDialogVisible.set(false)" />
+        <p-button [label]="'documents.create' | translate" [disabled]="!newTitle" (onClick)="create()" />
       </div>
     </p-dialog>
 
-    <p-dialog header="Rename document" [(visible)]="renameDialogVisible" [modal]="true" [style]="{ width: '28rem' }">
+    <p-dialog [header]="'documents.rename_document_dialog' | translate" [(visible)]="renameDialogVisible" [modal]="true" [style]="{ width: '28rem' }">
       <div class="field">
-        <label for="rename-title">Title</label>
+        <label for="rename-title">{{ 'documents.title_label' | translate }}</label>
         <input pInputText id="rename-title" type="text" [(ngModel)]="renameTitle" class="w-full" />
       </div>
       <div class="dialog-actions">
-        <p-button label="Cancel" severity="secondary" (onClick)="renameDialogVisible.set(false)" />
-        <p-button label="Save" [disabled]="!renameTitle" (onClick)="rename()" />
+        <p-button [label]="'documents.cancel' | translate" severity="secondary" (onClick)="renameDialogVisible.set(false)" />
+        <p-button [label]="'documents.save' | translate" [disabled]="!renameTitle" (onClick)="rename()" />
       </div>
     </p-dialog>
   `,

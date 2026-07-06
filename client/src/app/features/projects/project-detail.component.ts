@@ -6,13 +6,14 @@ import { Button } from 'primeng/button';
 import { Tag } from 'primeng/tag';
 import { Divider } from 'primeng/divider';
 import { Timeline } from 'primeng/timeline';
+import { TranslatePipe } from '@ngx-translate/core';
 import { ProjectService } from './project.service';
 import type { Project, ProjectStatus, Report } from '../../shared/models/project.model';
 import { ProjectStatus as Status } from '../../shared/models/project.model';
 
 @Component({
   selector: 'app-project-detail',
-  imports: [DatePipe, RouterLink, Card, Button, Tag, Divider, Timeline],
+  imports: [DatePipe, RouterLink, Card, Button, Tag, Divider, Timeline, TranslatePipe],
   template: `
     <div class="page-header">
       <div class="header-content">
@@ -25,13 +26,13 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
       <div class="header-actions">
         <p-button
           [routerLink]="['/projects', project()?.id, 'edit']"
-          label="Edit Project"
+          [label]="'project_detail.edit_project' | translate"
           icon="pi pi-pencil"
           severity="secondary"
           [outlined]="true"
         />
         <p-button
-          label="New Report"
+          [label]="'project_detail.new_report' | translate"
           icon="pi pi-plus"
           severity="primary"
           (onClick)="addReport()"
@@ -43,38 +44,38 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
       <div class="content-grid">
         <div class="main-content">
           <p-card styleClass="info-card">
-            <ng-template #title>Project Overview</ng-template>
+            <ng-template #title>{{ 'project_detail.project_overview' | translate }}</ng-template>
 
             <p class="description">{{ p.description }}</p>
 
             <p-divider />
 
             <div class="status-section">
-              <h4>Current Status</h4>
+              <h4>{{ 'project_detail.current_status' | translate }}</h4>
               <p-tag
-                [value]="getStatusLabel(p.status)"
+                [value]="'projects.status.' + p.status | translate"
                 [severity]="getStatusSeverity(p.status)"
                 [styleClass]="'mb-3'"
               />
             </div>
 
             <div class="dates-section">
-              <h4>Timeline</h4>
+              <h4>{{ 'project_detail.timeline' | translate }}</h4>
               <div class="date-item">
-                <span class="date-label">Created</span>
+                <span class="date-label">{{ 'project_detail.created' | translate }}</span>
                 <span class="date-value">{{ p.createdAt | date: 'mediumDate' }}</span>
               </div>
               <div class="date-item">
-                <span class="date-label">Last Updated</span>
+                <span class="date-label">{{ 'project_detail.last_updated' | translate }}</span>
                 <span class="date-value">{{ p.updatedAt | date: 'mediumDate' }}</span>
               </div>
               @if (p.dueDate) {
                 <div class="date-item">
-                  <span class="date-label">Due Date</span>
+                  <span class="date-label">{{ 'project_detail.due_date' | translate }}</span>
                   <span class="date-value" [class.overdue]="isOverdue(p.dueDate)">
                     {{ p.dueDate | date: 'mediumDate' }}
                     @if (isOverdue(p.dueDate)) {
-                      <p-tag value="Overdue" severity="danger" />
+                      <p-tag [value]="'project_detail.overdue' | translate" severity="danger" />
                     }
                   </span>
                 </div>
@@ -83,7 +84,7 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
           </p-card>
 
           <p-card styleClass="reports-card">
-            <ng-template #title>Reports ({{ p.reports.length }})</ng-template>
+            <ng-template #title>{{ 'project_detail.reports' | translate: { count: p.reports.length } }}</ng-template>
 
             <div class="reports-list">
               @for (report of p.reports; track report.id) {
@@ -91,8 +92,8 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
                   <div class="report-info">
                     <h5>{{ report.title }}</h5>
                     <div class="report-meta">
-                      <span>Version {{ report.version }}</span>
-                      <span>Updated {{ report.updatedAt | date: 'short' }}</span>
+                      <span>{{ 'project_detail.version' | translate: { version: report.version } }}</span>
+                      <span>{{ 'project_detail.updated' | translate }} {{ report.updatedAt | date: 'short' }}</span>
                     </div>
                   </div>
                   <p-tag
@@ -103,9 +104,9 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
               } @empty {
                 <div class="empty-reports">
                   <i class="pi pi-file"></i>
-                  <p>No reports yet</p>
+                  <p>{{ 'project_detail.no_reports' | translate }}</p>
                   <p-button
-                    label="Create First Report"
+                    [label]="'project_detail.create_first_report' | translate"
                     icon="pi pi-plus"
                     [outlined]="true"
                     severity="secondary"
@@ -119,34 +120,34 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
 
         <div class="sidebar-content">
           <p-card styleClass="activity-card">
-            <ng-template #title>Activity</ng-template>
+            <ng-template #title>{{ 'project_detail.activity' | translate }}</ng-template>
 
             <p-timeline [value]="activityEvents" />
           </p-card>
 
           <p-card styleClass="team-card">
-            <ng-template #title>Team</ng-template>
+            <ng-template #title>{{ 'project_detail.team' | translate }}</ng-template>
 
             <div class="team-list">
               <div class="team-member">
                 <div class="avatar">SC</div>
                 <div class="member-info">
                   <span class="name">Dr. Sarah Chen</span>
-                  <span class="role">Project Lead</span>
+                  <span class="role">{{ 'project_detail.project_lead' | translate }}</span>
                 </div>
               </div>
               <div class="team-member">
                 <div class="avatar">MJ</div>
                 <div class="member-info">
                   <span class="name">Prof. Michael Johnson</span>
-                  <span class="role">Contributor</span>
+                  <span class="role">{{ 'project_detail.contributor' | translate }}</span>
                 </div>
               </div>
             </div>
 
             <ng-template #footer>
               <p-button
-                label="Invite Member"
+                [label]="'project_detail.invite_member' | translate"
                 icon="pi pi-user-plus"
                 [text]="true"
                 severity="secondary"
@@ -158,8 +159,8 @@ import { ProjectStatus as Status } from '../../shared/models/project.model';
     } @else {
       <div class="not-found">
         <i class="pi pi-file-not-found"></i>
-        <h2>Project not found</h2>
-        <p-button routerLink="/projects" label="Back to Projects" />
+        <h2>{{ 'project_detail.project_not_found' | translate }}</h2>
+        <p-button routerLink="/projects" [label]="'project_detail.back_to_projects' | translate" />
       </div>
     }
   `,
@@ -379,17 +380,6 @@ export class ProjectDetailComponent {
 
   addReport(): void {
     console.log('Creating new report for project:', this.project()?.id);
-  }
-
-  getStatusLabel(status: ProjectStatus): string {
-    const labels: Record<ProjectStatus, string> = {
-      [Status.Draft]: 'Draft',
-      [Status.InProgress]: 'In Progress',
-      [Status.UnderReview]: 'Under Review',
-      [Status.Completed]: 'Completed',
-      [Status.Archived]: 'Archived',
-    };
-    return labels[status] ?? status;
   }
 
   getStatusSeverity(
