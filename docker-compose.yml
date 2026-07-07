@@ -77,6 +77,16 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  service-render:
+    build:
+      context: .
+      dockerfile: service-render/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "50054:50054"
+    environment:
+      LOG_LEVEL: ${RENDER_LOG_LEVEL:-INFO}
+
 volumes:
   pgdata:
   surrealdb_data:

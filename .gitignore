@@ -15,3 +15,9 @@ package-lock.json
 bun.lock
 /requirements
 /fixtures
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+service-ai/src/ai/proto/
+service-render/src/render/proto/

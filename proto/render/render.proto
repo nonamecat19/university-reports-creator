@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package render;
+
+option go_package = "github.com/nnc/university-reports-creator/gen/go/render";
+
+// RenderService is stateless (FR-ARC-03, FR-API-11): docx template parsing,
+// docx export merge, PDF conversion, CSL bibliography rendering. Called only
+// by service-document (FR-ARC-07 sanctioned edge) — the gateway never routes
+// to it directly.
+service RenderService {
+  // ParseTemplate extracts a TemplateModel from an uploaded docx (FR-TPL-08).
+  rpc ParseTemplate(ParseTemplateRequest) returns (ParseTemplateResponse);
+
+  // RenderDocx merges document content into the original template docx
+  // (FR-EXP-01..03).
+  rpc RenderDocx(RenderDocxRequest) returns (RenderDocxResponse);
+
+  // ConvertPdf converts a rendered docx to PDF via LibreOffice headless
+  // (FR-EXP-01 step 8, FR-EXP-09).
+  rpc ConvertPdf(ConvertPdfRequest) returns (ConvertPdfResponse);
+
+  // RenderBibliography formats sources per the given citation style
+  // (FR-BIB-08..11); used for both editor preview and export.
+  rpc RenderBibliography(RenderBibliographyRequest) returns (RenderBibliographyResponse);
+
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+// ── Template parsing ─────────────────────────────────────────────────
+
+message ParseTemplateRequest {
+  bytes docx_bytes = 1;
+  string filename = 2;
+}
+
+message ParseTemplateResponse {
+  // TemplateModel JSON (FR-TPL-08): { fields[], sections[], style_map,
+  // page_setup, numbering, warnings[] } — crosses the wire as JSON per
+  // FR-API-04 (rich/dynamic content isn't mirrored into proto messages).
+  string model_json = 1;
+  repeated Diagnostic diagnostics = 2;
+}
+
+message Diagnostic {
+  string severity = 1; // "error" | "warning"
+  string message = 2;
+  string location = 3; // paragraph index / header / footer, human-readable
+}
+
+// ── docx export ──────────────────────────────────────────────────────
+
+enum SectionKind {
+  SECTION_KIND_UNSPECIFIED = 0;
+  SECTION_KIND_CHAPTER = 1;
+  SECTION_KIND_APPENDIX = 2;
+}
+
+message RenderSection {
+  string id = 1;
+  string template_section_id = 2;
+  string title = 3;
+  SectionKind kind = 4;
+  int32 order = 5;
+  // ProseMirror JSON (FR-EDT-04).
+  string content_json = 6;
+}
+
+message RenderOptions {
+  // by_order | alphabetical (FR-BIB-06)
+  string numbering_mode = 1;
+  // repeat_header | continuation_caption (FR-TBL-08/09)
+  string table_continuation = 2;
+  bool include_uncited = 3;
+  // clean | with_track_changes | all_accepted (FR-REV-13)
+  string suggestions_strategy = 4;
+  bool include_comments = 5;
+}
+
+message RenderDocxRequest {
+  bytes template_docx = 1;
+  // TemplateModel JSON, as returned by ParseTemplate / stored on the template
+  // record (FR-TPL-08).
+  string model_json = 2;
+  map<string, string> metadata = 3;
+  repeated RenderSection sections = 4;
+  // CSL-JSON sources for the {{bibliography}} marker (FR-BIB-10); empty when
+  // the document has none.
+  repeated string sources_csl_json = 5;
+  RenderOptions options = 6;
+  // Resolved image bytes keyed by MinIO object key (FR-EDT-05). service-render
+  // is stateless and has no storage credentials, so service-document resolves
+  // every image node's object_key to bytes before calling RenderDocx.
+  map<string, bytes> images = 7;
+}
+
+message RenderDocxResponse {
+  bytes docx_bytes = 1;
+  repeated Diagnostic warnings = 2;
+}
+
+message ConvertPdfRequest {
+  bytes docx_bytes = 1;
+}
+
+message ConvertPdfResponse {
+  bytes pdf_bytes = 1;
+}
+
+// ── Bibliography ─────────────────────────────────────────────────────
+
+message RenderBibliographyRequest {
+  // MVP ships "dstu-8302-2015" (FR-BIB-11).
+  string style_id = 1;
+  repeated string sources_csl_json = 2;
+  // by_order | alphabetical (FR-BIB-06)
+  string numbering_mode = 3;
+}
+
+message BibliographyEntry {
+  int32 number = 1;
+  string source_id = 2;
+  string formatted = 3;
+}
+
+message RenderBibliographyResponse {
+  repeated BibliographyEntry entries = 1;
+}
+
+// ── Health ───────────────────────────────────────────────────────────
+
+message PingRequest {}
+
+message PingResponse {
+  string status = 1;
+}
