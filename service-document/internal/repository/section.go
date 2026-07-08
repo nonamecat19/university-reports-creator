@@ -88,6 +88,41 @@ func (r *SectionRepository) Add(ctx context.Context, documentID, title, kind str
 	return section, nil
 }
 
+// AddFromTemplate instantiates a section from a confirmed TemplateModel
+// region (FR-EDT-01: "prefilled with template example content") when a
+// document is created from a template.
+func (r *SectionRepository) AddFromTemplate(
+	ctx context.Context,
+	documentID, templateSectionID, title, kind string,
+	order int,
+	required bool,
+	content map[string]any,
+) (*Section, error) {
+	id := uuid.New().String()
+	now := time.Now()
+
+	const q = `CREATE type::record($table, $id) CONTENT {
+		document_id: $document_id, template_section_id: $template_section_id, title: $title, kind: $kind,
+		order_index: $order_index, required: $required, revision: 0, content: $content, updated_at: $updated_at
+	}`
+	res, err := surrealdb.Query[[]Section](ctx, r.db, q, map[string]any{
+		"table": sectionTable, "id": id, "document_id": documentID,
+		"template_section_id": templateSectionID, "title": title, "kind": kind,
+		"order_index": order, "required": required, "content": content, "updated_at": now,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("add section from template: %w", err)
+	}
+	section, err := single(res)
+	if err != nil {
+		return nil, err
+	}
+	if section == nil {
+		return nil, status.Error(codes.Internal, "add section: no row returned")
+	}
+	return section, nil
+}
+
 // UpdateContent writes content_json, bumping revision, rejecting a stale
 // expectedRevision (FR-EDT-09/FR-DAT-02). Sections are independent: writers to
 // different sections never conflict.

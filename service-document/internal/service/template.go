@@ -8,6 +8,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	filepb "github.com/nnc/university-reports-creator/gen/go/file"
+	renderpb "github.com/nnc/university-reports-creator/gen/go/render"
 	pb "github.com/nnc/university-reports-creator/gen/go/template"
 	"github.com/nnc/university-reports-creator/pkg/shared/grpcerr"
 	"github.com/nnc/university-reports-creator/service-document/internal/repository"
@@ -27,14 +29,60 @@ func (s *TemplateService) CreateTemplate(ctx context.Context, req *pb.CreateTemp
 		return nil, grpcerr.InvalidArgument("name is required", grpcerr.FieldViolation{Field: "name", Description: "must not be empty"})
 	}
 
+	var model map[string]any
+	var warnings []string
+	if req.GetFileRef() != "" {
+		model, warnings, err = s.parseTemplateFile(ctx, req.GetFileRef())
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	tmpl, version, err := s.Repos.Template.Create(ctx, ownerID, req.GetName(), req.GetDescription(), reportTypeToString(req.GetReportType()), req.GetFileRef())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create template: %v", err)
 	}
 
-	// Parsing (diagnostics/warnings) is fulfilled by service-render from P2;
-	// P1 records the template unparsed.
+	if model != nil {
+		version, err = s.Repos.Template.SetParsedModel(ctx, tmpl.ID, version.Version, model, warnings)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to store parsed template model: %v", err)
+		}
+	}
+
 	return templateResponse(tmpl, version), nil
+}
+
+// parseTemplateFile fetches the uploaded docx (FR-ARC-07: via service-files)
+// and parses it (via service-render's ParseTemplate) into a TemplateModel
+// (FR-TPL-08). Malformed uploads surface as InvalidArgument (FR-TPL-10
+// "errors reject upload") straight from service-render.
+func (s *TemplateService) parseTemplateFile(ctx context.Context, fileRef string) (map[string]any, []string, error) {
+	fileResp, err := s.Clients.Files.Download(ctx, &filepb.DownloadRequest{Id: fileRef})
+	if err != nil {
+		return nil, nil, status.Errorf(codes.Internal, "failed to fetch uploaded template file: %v", err)
+	}
+
+	parseResp, err := s.Clients.Render.ParseTemplate(ctx, &renderpb.ParseTemplateRequest{
+		DocxBytes: fileResp.GetData(),
+		Filename:  fileResp.GetFilename(),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var model map[string]any
+	if err := json.Unmarshal([]byte(parseResp.GetModelJson()), &model); err != nil {
+		return nil, nil, status.Errorf(codes.Internal, "render service returned invalid model JSON: %v", err)
+	}
+
+	warnings := make([]string, 0, len(parseResp.GetDiagnostics()))
+	for _, d := range parseResp.GetDiagnostics() {
+		if d.GetSeverity() == "warning" {
+			warnings = append(warnings, d.GetMessage())
+		}
+	}
+	return model, warnings, nil
 }
 
 func (s *TemplateService) ConfirmTemplate(ctx context.Context, req *pb.ConfirmTemplateRequest) (*pb.TemplateResponse, error) {
@@ -51,11 +99,19 @@ func (s *TemplateService) ConfirmTemplate(ctx context.Context, req *pb.ConfirmTe
 	}
 
 	raw := req.GetAdjustedModelJson()
-	if raw == "" {
-		raw = "{}"
-	}
 	var model map[string]any
-	if err := json.Unmarshal([]byte(raw), &model); err != nil {
+	if raw == "" {
+		// No edits from the review screen (FR-TPL-11): keep the auto-parsed
+		// model as-is rather than wiping it to {}.
+		current, err := s.Repos.Template.CurrentVersion(ctx, tmpl.ID, tmpl.CurrentVersion)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to load current template version: %v", err)
+		}
+		if current == nil {
+			return nil, status.Errorf(codes.NotFound, "template version not found")
+		}
+		model = current.Model
+	} else if err := json.Unmarshal([]byte(raw), &model); err != nil {
 		return nil, grpcerr.InvalidArgument("adjusted_model_json is not valid JSON", grpcerr.FieldViolation{Field: "adjusted_model_json", Description: "must be valid JSON"})
 	}
 
@@ -122,10 +178,28 @@ func (s *TemplateService) UploadTemplateVersion(ctx context.Context, req *pb.Upl
 	if err != nil {
 		return nil, err
 	}
+
+	var model map[string]any
+	var warnings []string
+	if req.GetFileRef() != "" {
+		model, warnings, err = s.parseTemplateFile(ctx, req.GetFileRef())
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	tmpl, version, err := s.Repos.Template.UploadVersion(ctx, req.GetId(), ownerID, req.GetFileRef())
 	if err != nil {
 		return nil, err
 	}
+
+	if model != nil {
+		version, err = s.Repos.Template.SetParsedModel(ctx, tmpl.ID, version.Version, model, warnings)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to store parsed template model: %v", err)
+		}
+	}
+
 	return templateResponse(tmpl, version), nil
 }
 
@@ -186,9 +260,13 @@ func visibilityToProto(v string) pb.Visibility {
 
 func templateToProto(tmpl *repository.Template, version *repository.TemplateVersion) *pb.Template {
 	modelJSON := ""
-	if version != nil && len(version.Model) > 0 {
-		if b, err := json.Marshal(version.Model); err == nil {
-			modelJSON = string(b)
+	confirmed := false
+	if version != nil {
+		confirmed = version.Confirmed
+		if len(version.Model) > 0 {
+			if b, err := json.Marshal(version.Model); err == nil {
+				modelJSON = string(b)
+			}
 		}
 	}
 	return &pb.Template{
@@ -200,6 +278,7 @@ func templateToProto(tmpl *repository.Template, version *repository.TemplateVers
 		Visibility:     visibilityToProto(tmpl.Visibility),
 		CurrentVersion: int32(tmpl.CurrentVersion),
 		ModelJson:      modelJSON,
+		Confirmed:      confirmed,
 		CreatedAt:      timestamppb.New(tmpl.CreatedAt),
 		UpdatedAt:      timestamppb.New(tmpl.UpdatedAt),
 	}

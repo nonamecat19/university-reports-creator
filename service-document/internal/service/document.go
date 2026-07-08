@@ -37,12 +37,51 @@ func (s *DocumentService) CreateDocument(ctx context.Context, req *pb.CreateDocu
 		return nil, grpcerr.InvalidArgument("title is required", grpcerr.FieldViolation{Field: "title", Description: "must not be empty"})
 	}
 
-	doc, err := s.Repos.Document.Create(ctx, ownerID, req.GetTemplateId(), int(req.GetTemplateVersion()), req.GetTitle())
+	var model *templateModel
+	if req.GetTemplateId() != "" {
+		version, err := s.Repos.Template.CurrentVersion(ctx, req.GetTemplateId(), int(req.GetTemplateVersion()))
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to load template version: %v", err)
+		}
+		if version == nil {
+			return nil, status.Errorf(codes.NotFound, "template version not found")
+		}
+		if !version.Confirmed {
+			return nil, status.Error(codes.FailedPrecondition, "template has not been confirmed yet (FR-TPL-11)")
+		}
+		model, err = parseTemplateModel(version.Model)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "invalid template model: %v", err)
+		}
+	}
+
+	var initialMetadata map[string]string
+	if model != nil {
+		initialMetadata = defaultsFromFields(model.Fields)
+	}
+
+	doc, err := s.Repos.Document.Create(ctx, ownerID, req.GetTemplateId(), int(req.GetTemplateVersion()), req.GetTitle(), initialMetadata)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create document: %v", err)
 	}
 
-	return &pb.DocumentResponse{Document: documentToProto(doc, pb.Role_ROLE_OWNER)}, nil
+	var pbSections []*pb.Section
+	if model != nil {
+		pbSections = make([]*pb.Section, 0, len(model.Sections))
+		for _, ms := range model.Sections {
+			kind := "chapter"
+			if ms.Kind == "appendix" {
+				kind = "appendix"
+			}
+			sec, err := s.Repos.Section.AddFromTemplate(ctx, doc.ID, ms.ID, ms.Label, kind, ms.Order, ms.Required, ms.ExampleContent)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to create section %q from template: %v", ms.ID, err)
+			}
+			pbSections = append(pbSections, sectionToProto(sec))
+		}
+	}
+
+	return &pb.DocumentResponse{Document: documentToProto(doc, pb.Role_ROLE_OWNER), Sections: pbSections}, nil
 }
 
 func (s *DocumentService) GetDocument(ctx context.Context, req *pb.GetDocumentRequest) (*pb.DocumentResponse, error) {

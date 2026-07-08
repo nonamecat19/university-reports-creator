@@ -54,9 +54,12 @@ func NewDocumentRepository(db *surrealdb.DB) *DocumentRepository {
 	return &DocumentRepository{db: db}
 }
 
-func (r *DocumentRepository) Create(ctx context.Context, ownerID, templateID string, templateVersion int, title string) (*Document, error) {
+func (r *DocumentRepository) Create(ctx context.Context, ownerID, templateID string, templateVersion int, title string, initialMetadata map[string]string) (*Document, error) {
 	now := time.Now()
 	id := uuid.New().String()
+	if initialMetadata == nil {
+		initialMetadata = map[string]string{}
+	}
 
 	const q = `CREATE type::record($table, $id) CONTENT {
 		owner_id: $owner_id, template_id: $template_id, template_version: $template_version,
@@ -70,7 +73,7 @@ func (r *DocumentRepository) Create(ctx context.Context, ownerID, templateID str
 		"template_id":      templateID,
 		"template_version": templateVersion,
 		"title":            title,
-		"metadata":         map[string]string{},
+		"metadata":         initialMetadata,
 		"settings":         Settings{NumberingMode: "by_order", TableContinuation: "repeat_header"},
 		"created_at":       now,
 		"updated_at":       now,

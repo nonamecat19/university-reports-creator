@@ -45,6 +45,9 @@ message Template {
   string model_json = 8;
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
+  // Whether the current version's model has passed the review screen
+  // (FR-TPL-11); documents can only be created from a confirmed template.
+  bool confirmed = 11;
 }
 
 message CreateTemplateRequest {

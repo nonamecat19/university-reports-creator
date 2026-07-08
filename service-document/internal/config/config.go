@@ -18,6 +18,12 @@ type SurrealDBConfig struct {
 type Config struct {
 	config.BaseConfig
 	SurrealDB SurrealDBConfig `envPrefix:""`
+
+	// Sanctioned service->service edge (FR-ARC-07): service-document orchestrates
+	// template parsing and export via service-render, resolving bytes via
+	// service-files first.
+	ServiceRender string `env:"SERVICE_RENDER" envDefault:"localhost:50054"`
+	ServiceFiles  string `env:"SERVICE_FILES" envDefault:"localhost:50053"`
 }
 
 func Load() (*Config, error) {

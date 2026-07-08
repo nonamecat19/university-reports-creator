@@ -226,8 +226,29 @@ func (r *TemplateRepository) UploadVersion(ctx context.Context, id, ownerID, fil
 	return updated, version, nil
 }
 
+// SetParsedModel stores the auto-parsed TemplateModel (FR-TPL-08) right after
+// upload, before the user has reviewed/confirmed it (FR-TPL-11) — Confirmed
+// stays false until ConfirmTemplate.
+func (r *TemplateRepository) SetParsedModel(ctx context.Context, templateID string, version int, model map[string]any, warnings []string) (*TemplateVersion, error) {
+	const q = `UPDATE template_version SET model = $model, warnings = $warnings WHERE template_id = $template_id AND version = $version`
+	res, err := surrealdb.Query[[]TemplateVersion](ctx, r.db, q, map[string]any{
+		"template_id": templateID, "version": version, "model": model, "warnings": warnings,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("set parsed template model: %w", err)
+	}
+	v, err := single(res)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, status.Errorf(codes.NotFound, "template version not found")
+	}
+	return v, nil
+}
+
 // Confirm marks the current version's reviewed/adjusted model as confirmed
-// (FR-TPL-11); adjustedModel is empty JSON in P1 until service-render parses.
+// (FR-TPL-11).
 func (r *TemplateRepository) Confirm(ctx context.Context, templateID string, version int, adjustedModel map[string]any) (*TemplateVersion, error) {
 	const q = `UPDATE template_version SET model = $model, confirmed = true WHERE template_id = $template_id AND version = $version`
 	res, err := surrealdb.Query[[]TemplateVersion](ctx, r.db, q, map[string]any{

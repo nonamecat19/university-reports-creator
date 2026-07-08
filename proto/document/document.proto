@@ -21,6 +21,13 @@ service DocumentService {
   rpc RemoveSection(RemoveSectionRequest) returns (RemoveSectionResponse);
   rpc ReorderSections(ReorderSectionsRequest) returns (ReorderSectionsResponse);
   rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
+
+  // Export (FR-API-11a): service-document owns the data and orchestrates
+  // service-render via the sanctioned FR-ARC-07 edge.
+  rpc ExportDocument(ExportDocumentRequest) returns (ExportDocumentResponse);
+  rpc GetExportJob(GetExportJobRequest) returns (ExportJobStatus);
+  rpc ListExports(ListExportsRequest) returns (ListExportsResponse);
+  rpc PreviewPdf(PreviewPdfRequest) returns (ExportDocumentResponse);
 }
 
 enum Role {
@@ -168,4 +175,62 @@ message DocumentResponse {
 
 message SectionResponse {
   Section section = 1;
+}
+
+// ── Export (FR-API-11a, FR-EXP-04..09) ──────────────────────────────
+
+message ExportOptions {
+  // "docx" | "docx+pdf"
+  string format = 1;
+  // clean | with_track_changes | all_accepted (FR-REV-13)
+  string suggestions_strategy = 2;
+  bool include_comments = 3;
+  // repeat_header | continuation_caption (FR-TBL-08/09)
+  string table_continuation = 4;
+}
+
+message ExportDocumentRequest {
+  string document_id = 1;
+  ExportOptions options = 2;
+}
+
+message ExportDocumentResponse {
+  string job_id = 1;
+}
+
+message PreviewPdfRequest {
+  string document_id = 1;
+}
+
+message ExportArtifact {
+  // "docx" | "pdf"
+  string kind = 1;
+  // service-files object key.
+  string file_key = 2;
+  string filename = 3;
+}
+
+message GetExportJobRequest {
+  string job_id = 1;
+}
+
+message ExportJobStatus {
+  string job_id = 1;
+  string document_id = 2;
+  // queued | running | done | failed
+  string status = 3;
+  string stage = 4;
+  repeated string warnings = 5;
+  repeated ExportArtifact artifacts = 6;
+  string error = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp finished_at = 9;
+}
+
+message ListExportsRequest {
+  string document_id = 1;
+}
+
+message ListExportsResponse {
+  repeated ExportJobStatus jobs = 1;
 }

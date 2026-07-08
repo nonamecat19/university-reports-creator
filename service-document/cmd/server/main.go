@@ -10,6 +10,7 @@ import (
 	"github.com/nnc/university-reports-creator/gen/go/document"
 	"github.com/nnc/university-reports-creator/gen/go/template"
 	grpcserver "github.com/nnc/university-reports-creator/pkg/shared/grpc"
+	"github.com/nnc/university-reports-creator/service-document/internal/clients"
 	"github.com/nnc/university-reports-creator/service-document/internal/config"
 	"github.com/nnc/university-reports-creator/service-document/internal/db"
 	"github.com/nnc/university-reports-creator/service-document/internal/repository"
@@ -37,8 +38,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	cl, err := clients.Dial(cfg.ServiceRender, cfg.ServiceFiles)
+	if err != nil {
+		slog.Error("failed to dial backend clients", "error", err)
+		os.Exit(1)
+	}
+
 	repos := repository.New(surrealDB)
-	svcs := service.New(repos)
+	svcs := service.New(repos, cl)
 
 	srv := grpcserver.New()
 	document.RegisterDocumentServiceServer(srv.Server(), svcs.Document)

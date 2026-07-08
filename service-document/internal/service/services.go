@@ -1,9 +1,12 @@
 package service
 
-import "github.com/nnc/university-reports-creator/service-document/internal/repository"
+import (
+	"github.com/nnc/university-reports-creator/service-document/internal/clients"
+	"github.com/nnc/university-reports-creator/service-document/internal/repository"
+)
 
 type Service interface {
-	Init(repos *repository.Repos, services *Services)
+	Init(repos *repository.Repos, cl *clients.Clients, services *Services)
 }
 
 type Services struct {
@@ -11,7 +14,7 @@ type Services struct {
 	Template *TemplateService
 }
 
-func New(repos *repository.Repos) *Services {
+func New(repos *repository.Repos, cl *clients.Clients) *Services {
 	svcs := &Services{
 		Document: &DocumentService{},
 		Template: &TemplateService{},
@@ -23,7 +26,7 @@ func New(repos *repository.Repos) *Services {
 	}
 
 	for _, s := range init {
-		s.Init(repos, svcs)
+		s.Init(repos, cl, svcs)
 	}
 
 	return svcs

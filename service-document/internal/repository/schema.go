@@ -56,6 +56,20 @@ DEFINE FIELD IF NOT EXISTS revision ON section TYPE int DEFAULT 0;
 DEFINE FIELD IF NOT EXISTS content ON section TYPE object FLEXIBLE DEFAULT {};
 DEFINE FIELD IF NOT EXISTS updated_at ON section TYPE datetime;
 DEFINE INDEX IF NOT EXISTS idx_section_document ON section FIELDS document_id;
+
+DEFINE TABLE IF NOT EXISTS export_job SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS document_id ON export_job TYPE string;
+DEFINE FIELD IF NOT EXISTS requested_by ON export_job TYPE string;
+DEFINE FIELD IF NOT EXISTS options ON export_job TYPE object FLEXIBLE DEFAULT {};
+DEFINE FIELD IF NOT EXISTS status ON export_job TYPE string DEFAULT 'queued';
+DEFINE FIELD IF NOT EXISTS stage ON export_job TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS warnings ON export_job TYPE array<string> DEFAULT [];
+DEFINE FIELD IF NOT EXISTS artifacts ON export_job TYPE array DEFAULT [];
+DEFINE FIELD IF NOT EXISTS artifacts.* ON export_job TYPE object FLEXIBLE;
+DEFINE FIELD IF NOT EXISTS error ON export_job TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS created_at ON export_job TYPE datetime;
+DEFINE FIELD IF NOT EXISTS finished_at ON export_job TYPE option<datetime>;
+DEFINE INDEX IF NOT EXISTS idx_export_job_document ON export_job FIELDS document_id;
 `
 
 // ApplySchema applies the DEFINE statements above. Safe to run on every
