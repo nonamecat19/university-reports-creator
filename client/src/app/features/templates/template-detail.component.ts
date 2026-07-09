@@ -1,106 +1,130 @@
-import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { Card } from 'primeng/card';
-import { Button } from 'primeng/button';
-import { Tag } from 'primeng/tag';
-import { Divider } from 'primeng/divider';
-import { Tag as TagComponent } from 'primeng/tag';
+import { Component, inject, type OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import type { Template } from '@gen/template/template';
+import { type ReportType, Visibility } from '@gen/template/template';
 import { TranslatePipe } from '@ngx-translate/core';
+import { Button } from 'primeng/button';
+import { Card } from 'primeng/card';
+import { Dialog } from 'primeng/dialog';
+import { InputText } from 'primeng/inputtext';
+import { Tag } from 'primeng/tag';
+import { Tooltip } from 'primeng/tooltip';
+import { DocumentService } from '../../core/services/document.service';
+import {
+  getReportTypeLabel,
+  getReportTypeSeverity,
+  getVisibilityLabel,
+  timestampToDate,
+} from '../../shared/models/template.model';
 import { TemplateService } from './template.service';
-import type { Template } from '../../shared/models/template.model';
-import { FieldType } from '../../shared/models/template.model';
 
 @Component({
   selector: 'app-template-detail',
-  imports: [DatePipe, RouterLink, Card, Button, TagComponent, Divider, TranslatePipe],
+  imports: [
+    DatePipe,
+    FormsModule,
+    RouterLink,
+    Card,
+    Button,
+    Dialog,
+    InputText,
+    Tag,
+    Tooltip,
+    TranslatePipe,
+  ],
   template: `
     <div class="page-header">
       <div class="header-content">
-        <p-button routerLink="/templates" variant="text" icon="pi pi-arrow-left" />
+        <p-button routerLink="/templates" variant="text" icon="pi pi-arrow-left" data-testid="template-detail-back" />
         <div class="header-text">
-          <h1>{{ template()?.name }}</h1>
+          <h1 data-testid="template-detail-name">{{ template()?.name }}</h1>
           <p>{{ template()?.description }}</p>
         </div>
       </div>
       <div class="header-actions">
-        <p-button
-          [routerLink]="['/templates', template()?.id, 'edit']"
-          [label]="'template_detail.edit_template' | translate"
-          icon="pi pi-pencil"
-          severity="secondary"
-          [outlined]="true"
-        />
+        @if (!template()?.confirmed) {
+          <p-button
+            [label]="'template_detail.confirm' | translate"
+            icon="pi pi-check"
+            severity="secondary"
+            [loading]="confirming()"
+            (onClick)="confirmTemplate()"
+          />
+        }
         <p-button
           [label]="'template_detail.use_template' | translate"
           icon="pi pi-plus"
           severity="primary"
-          (onClick)="useTemplate()"
+          [disabled]="!template()?.confirmed"
+          [pTooltip]="template()?.confirmed ? '' : ('template_detail.confirm_first' | translate)"
+          (onClick)="openUseTemplateDialog()"
         />
       </div>
     </div>
 
-    @if (template(); as t) {
-      <div class="content-grid">
-        <p-card styleClass="info-card">
-          <ng-template #title>{{ 'template_detail.template_info' | translate }}</ng-template>
-
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="label">{{ 'template_detail.category' | translate }}</span>
-              <p-tag
-                [value]="'templates.category.' + t.category | translate"
-                [severity]="getCategorySeverity(t.category)"
-              />
-            </div>
-            <div class="info-item">
-              <span class="label">{{ 'template_detail.visibility' | translate }}</span>
-              <p-tag [value]="(t.isPublic ? 'template_detail.public' : 'template_detail.private') | translate" />
-            </div>
-            <div class="info-item">
-              <span class="label">{{ 'template_detail.author' | translate }}</span>
-              <span class="value">{{ t.authorName }}</span>
-            </div>
-            <div class="info-item">
-              <span class="label">{{ 'template_detail.usage_count' | translate }}</span>
-              <span class="value">{{ 'template_detail.times' | translate: { count: t.usageCount } }}</span>
-            </div>
-            <div class="info-item">
-              <span class="label">{{ 'template_detail.created' | translate }}</span>
-              <span class="value">{{ t.createdAt | date: 'mediumDate' }}</span>
-            </div>
-            <div class="info-item">
-              <span class="label">{{ 'template_detail.last_updated' | translate }}</span>
-              <span class="value">{{ t.updatedAt | date: 'mediumDate' }}</span>
-            </div>
-          </div>
-        </p-card>
-
-        <p-card styleClass="fields-card">
-          <ng-template #title>{{ 'template_detail.form_fields' | translate: { count: t.fields.length } }}</ng-template>
-
-          <div class="fields-list">
-            @for (field of t.fields; track field.id; let i = $index) {
-              <div class="field-item">
-                <span class="field-number">{{ i + 1 }}</span>
-                <div class="field-info">
-                  <span class="field-name">{{ field.label }}</span>
-                  <span class="field-type">{{ 'template_detail.field_type.' + field.type | translate }}</span>
-                </div>
-                @if (field.required) {
-                  <p-tag [value]="'template_detail.required' | translate" severity="danger" />
-                }
-                @if (field.options?.length) {
-                  <p-tag [value]="'template_detail.options' | translate: { count: field.options?.length ?? 0 }" severity="info" />
-                }
-              </div>
-              @if (i < t.fields.length - 1) {
-                <p-divider />
-              }
-            }
-          </div>
-        </p-card>
+    @if (loading()) {
+      <div class="loading-state">
+        <i class="pi pi-spinner pi-spin"></i>
+        <p>{{ 'template_detail.loading' | translate }}</p>
       </div>
+    } @else if (template()) {
+      @if (template()!; as t) {
+        <div class="content-grid">
+          <p-card styleClass="info-card">
+            <ng-template #title>{{ 'template_detail.template_info' | translate }}</ng-template>
+
+            <div class="info-grid" data-testid="template-detail-info">
+              <div class="info-item">
+                <span class="label">{{ 'template_detail.report_type' | translate }}</span>
+                <p-tag
+                  [value]="getReportTypeLabel(t.reportType) | translate"
+                  [severity]="getReportTypeSeverity(t.reportType)"
+                />
+              </div>
+              <div class="info-item">
+                <span class="label">{{ 'template_detail.visibility' | translate }}</span>
+                <p-tag
+                  [value]="getVisibilityLabel(t.visibility) | translate"
+                  [severity]="t.visibility === Visibility.PUBLIC ? 'success' : 'secondary'"
+                />
+              </div>
+              <div class="info-item">
+                <span class="label">{{ 'template_detail.version' | translate }}</span>
+                <span class="value">{{ t.currentVersion }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">{{ 'template_detail.created' | translate }}</span>
+                <span class="value">{{ formatDate(t.createdAt) | date: 'mediumDate' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">{{ 'template_detail.last_updated' | translate }}</span>
+                <span class="value">{{ formatDate(t.updatedAt) | date: 'mediumDate' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">{{ 'template_detail.owner_id' | translate }}</span>
+                <span class="value">{{ t.ownerId }}</span>
+              </div>
+            </div>
+          </p-card>
+
+          @if (t.modelJson) {
+            <p-card styleClass="model-card">
+              <ng-template #title>{{ 'template_detail.template_model' | translate }}</ng-template>
+              <pre class="model-json">{{ t.modelJson }}</pre>
+            </p-card>
+          } @else {
+            <p-card styleClass="empty-card">
+              <ng-template #title>{{ 'template_detail.template_model' | translate }}</ng-template>
+              <div class="empty-model">
+                <i class="pi pi-file"></i>
+                <p>{{ 'template_detail.no_model' | translate }}</p>
+              </div>
+            </p-card>
+          }
+        </div>
+      }
     } @else {
       <div class="not-found">
         <i class="pi pi-file-not-found"></i>
@@ -108,8 +132,33 @@ import { FieldType } from '../../shared/models/template.model';
         <p-button routerLink="/templates" [label]="'template_detail.back_to_templates' | translate" />
       </div>
     }
+
+    <p-dialog [header]="'template_detail.use_template_dialog' | translate" [(visible)]="useTemplateDialogVisible" [modal]="true" [style]="{ width: '28rem' }">
+      <div class="field">
+        <label for="new-doc-title">{{ 'template_detail.document_title_label' | translate }}</label>
+        <input pInputText id="new-doc-title" type="text" [(ngModel)]="newDocumentTitle" class="w-full" />
+      </div>
+      <div class="dialog-actions">
+        <p-button [label]="'common.cancel' | translate" severity="secondary" (onClick)="useTemplateDialogVisible.set(false)" />
+        <p-button [label]="'common.create' | translate" [loading]="creatingDocument()" [disabled]="!newDocumentTitle" (onClick)="createDocumentFromTemplate()" />
+      </div>
+    </p-dialog>
   `,
   styles: `
+    .field {
+      margin-bottom: 1rem;
+    }
+    .field label {
+      display: block;
+      margin-bottom: 0.35rem;
+      font-size: 0.875rem;
+    }
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
     .page-header {
       display: flex;
       justify-content: space-between;
@@ -141,7 +190,7 @@ import { FieldType } from '../../shared/models/template.model';
 
     .content-grid {
       display: grid;
-      grid-template-columns: 1fr 2fr;
+      grid-template-columns: 1fr 1fr;
       gap: 1.5rem;
     }
 
@@ -169,44 +218,29 @@ import { FieldType } from '../../shared/models/template.model';
       font-weight: 500;
     }
 
-    .fields-list {
+    .model-json {
+      margin: 0;
+      padding: 1rem;
+      background: var(--p-surface-50);
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 0.875rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .empty-model {
       display: flex;
       flex-direction: column;
-    }
-
-    .field-item {
-      display: flex;
       align-items: center;
-      gap: 1rem;
-      padding: 0.75rem 0;
-    }
-
-    .field-number {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 1.5rem;
-      height: 1.5rem;
-      border-radius: 50%;
-      background: var(--p-surface-100);
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-
-    .field-info {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .field-name {
-      font-weight: 500;
-    }
-
-    .field-type {
-      font-size: 0.75rem;
+      padding: 2rem;
       color: var(--p-text-muted-color);
-      text-transform: capitalize;
+    }
+
+    .empty-model i {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
     }
 
     .not-found {
@@ -227,38 +261,102 @@ import { FieldType } from '../../shared/models/template.model';
     .not-found h2 {
       margin: 0 0 1rem;
     }
+
+    .loading-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem;
+      text-align: center;
+      color: var(--p-text-muted-color);
+    }
+
+    .loading-state i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
   `,
 })
-export class TemplateDetailComponent {
+export class TemplateDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly templateService = inject(TemplateService);
+  private readonly documentService = inject(DocumentService);
 
-  protected readonly template = signal<Template | undefined | null>(undefined);
+  protected readonly template = signal<Template | undefined>(undefined);
+  protected readonly loading = signal<boolean>(true);
+  protected readonly confirming = signal(false);
+  protected readonly useTemplateDialogVisible = signal(false);
+  protected readonly creatingDocument = signal(false);
+  protected newDocumentTitle = '';
 
-  constructor() {
+  protected readonly Visibility = Visibility;
+
+  ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
-      this.template.set(this.templateService.getById(id));
+      this.loadTemplate(id);
     }
   }
 
-  useTemplate(): void {
-    console.log('Creating new report from template:', this.template()?.id);
+  private async loadTemplate(id: string): Promise<void> {
+    this.loading.set(true);
+    const template = await this.templateService.getById(id);
+    this.template.set(template);
+    this.loading.set(false);
   }
 
-  getCategorySeverity(
-    category: string
+  async confirmTemplate(): Promise<void> {
+    const id = this.template()?.id;
+    if (!id) return;
+    this.confirming.set(true);
+    try {
+      const confirmed = await this.templateService.confirm(id);
+      if (confirmed) this.template.set(confirmed);
+    } finally {
+      this.confirming.set(false);
+    }
+  }
+
+  openUseTemplateDialog(): void {
+    this.newDocumentTitle = this.template()?.name ?? '';
+    this.useTemplateDialogVisible.set(true);
+  }
+
+  async createDocumentFromTemplate(): Promise<void> {
+    const t = this.template();
+    if (!t || !this.newDocumentTitle) return;
+    this.creatingDocument.set(true);
+    try {
+      const docId = await this.documentService.createAndGetId(
+        this.newDocumentTitle,
+        t.id,
+        t.currentVersion
+      );
+      await this.router.navigate(['/documents', docId]);
+    } catch (err) {
+      console.error('Failed to create document from template', err);
+    } finally {
+      this.creatingDocument.set(false);
+    }
+  }
+
+  getReportTypeLabel(type: ReportType): string {
+    return getReportTypeLabel(type);
+  }
+
+  getReportTypeSeverity(
+    type: ReportType
   ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
-    const severities: Record<
-      string,
-      'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast'
-    > = {
-      annual: 'success',
-      research: 'info',
-      accreditation: 'warn',
-      compliance: 'danger',
-      custom: 'secondary',
-    };
-    return severities[category] ?? 'secondary';
+    return getReportTypeSeverity(type);
+  }
+
+  getVisibilityLabel(visibility: Visibility): string {
+    return getVisibilityLabel(visibility);
+  }
+
+  formatDate(ts?: { seconds: bigint; nanos: number }): Date | undefined {
+    return timestampToDate(ts);
   }
 }

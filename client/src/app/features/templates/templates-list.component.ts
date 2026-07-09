@@ -1,20 +1,21 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, type OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
-import { Card } from 'primeng/card';
+import { Router, RouterLink } from '@angular/router';
+import { ReportType, TemplateFilter, Visibility } from '@gen/template/template';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { Button } from 'primeng/button';
+import { Card } from 'primeng/card';
+import { Dialog } from 'primeng/dialog';
 import { InputText } from 'primeng/inputtext';
 import { Select } from 'primeng/select';
 import { Tag } from 'primeng/tag';
-import { Badge } from 'primeng/badge';
-import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { FileService } from '../../core/services/file.service';
+import { getReportTypeLabel, getReportTypeSeverity } from '../../shared/models/template.model';
 import { TemplateService } from './template.service';
-import type { Template, TemplateCategory } from '../../shared/models/template.model';
-import { TemplateCategory as Category } from '../../shared/models/template.model';
 
 @Component({
   selector: 'app-templates-list',
-  imports: [FormsModule, RouterLink, Card, Button, InputText, Select, Tag, Badge, TranslatePipe],
+  imports: [FormsModule, RouterLink, Card, Button, Dialog, InputText, Select, Tag, TranslatePipe],
   template: `
     <div class="page-header">
       <div class="header-content">
@@ -25,6 +26,7 @@ import { TemplateCategory as Category } from '../../shared/models/template.model
         [label]="'templates.new_template' | translate"
         icon="pi pi-plus"
         severity="primary"
+        (onClick)="openUploadDialog()"
       />
     </div>
 
@@ -33,78 +35,138 @@ import { TemplateCategory as Category } from '../../shared/models/template.model
         <i class="pi pi-search"></i>
         <input
           pInputText
-          [(ngModel)]="searchQuery"
-          (ngModelChange)="filterTemplates()"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="searchQuery.set($event)"
           [placeholder]="'templates.search_placeholder' | translate"
+          data-testid="templates-search-input"
         />
       </span>
       <p-select
-        [(ngModel)]="selectedCategory"
-        [options]="categoryOptions"
-        [placeholder]="'templates.all_categories' | translate"
-        (ngModelChange)="filterTemplates()"
+        [ngModel]="selectedReportType()"
+        [options]="reportTypeOptions"
+        [placeholder]="'templates.all_types' | translate"
+        (ngModelChange)="selectedReportType.set($event)"
+        data-testid="templates-type-filter"
       />
     </div>
 
-    <div class="templates-grid">
-      @for (template of filteredTemplates(); track template.id) {
-        <p-card styleClass="template-card">
-          <ng-template #title>{{ template.name }}</ng-template>
-          <ng-template #subtitle>
-            <p-tag
-              [value]="'templates.category.' + template.category | translate"
-              [severity]="getCategorySeverity(template.category)"
-            />
-          </ng-template>
+    @if (templateService.isLoading()) {
+      <div class="loading-state">
+        <i class="pi pi-spinner pi-spin"></i>
+        <p>{{ 'templates.loading' | translate }}</p>
+      </div>
+    } @else if (templateService.error()) {
+      <div class="error-state">
+        <i class="pi pi-exclamation-triangle"></i>
+        <p>{{ templateService.error() }}</p>
+      </div>
+    } @else {
+      <div class="templates-grid" data-testid="templates-grid">
+        @for (template of filteredTemplates(); track template.id) {
+          <p-card styleClass="template-card" data-testid="templates-card">
+            <ng-template #title>{{ template.name }}</ng-template>
+            <ng-template #subtitle>
+              <p-tag
+                [value]="getReportTypeLabel(template.reportType) | translate"
+                [severity]="getReportTypeSeverity(template.reportType)"
+              />
+            </ng-template>
 
-          <p class="description">{{ template.description }}</p>
+            <p class="description">{{ template.description }}</p>
 
-          <div class="template-meta">
-            <div class="meta-item">
-              <i class="pi pi-file"></i>
-              <span>{{ 'templates.fields' | translate: { count: template.fields.length } }}</span>
+            <div class="template-meta">
+              <div class="meta-item">
+                <i class="pi pi-file"></i>
+                <span>{{ 'templates.version' | translate: { version: template.currentVersion } }}</span>
+              </div>
+              @if (template.visibility === Visibility.PUBLIC) {
+                <div class="meta-item">
+                  <i class="pi pi-globe"></i>
+                  <span>{{ 'templates.public' | translate }}</span>
+                </div>
+              } @else {
+                <div class="meta-item">
+                  <i class="pi pi-lock"></i>
+                  <span>{{ 'templates.private' | translate }}</span>
+                </div>
+              }
             </div>
-            <div class="meta-item">
-              <i class="pi pi-users"></i>
-              <span>{{ 'templates.uses' | translate: { count: template.usageCount } }}</span>
-            </div>
-            @if (!template.isPublic) {
-              <p-badge [value]="'templates.private' | translate" severity="secondary" />
-            }
+
+            <ng-template #footer>
+              <div class="card-actions">
+                <p-button
+                  [label]="'templates.view' | translate"
+                  severity="secondary"
+                  [outlined]="true"
+                  [routerLink]="['/templates', template.id]"
+                  data-testid="templates-view-btn"
+                />
+                <p-button
+                  icon="pi pi-trash"
+                  severity="danger"
+                  [text]="true"
+                  (onClick)="deleteTemplate(template.id)"
+                  data-testid="templates-delete-btn"
+                />
+              </div>
+            </ng-template>
+          </p-card>
+        } @empty {
+          <div class="empty-state">
+            <i class="pi pi-file"></i>
+            <h3>{{ 'templates.no_templates_found' | translate }}</h3>
+            <p>{{ 'templates.try_adjusting' | translate }}</p>
           </div>
+        }
+      </div>
+    }
 
-          <ng-template #footer>
-            <div class="card-actions">
-              <p-button
-                [label]="'templates.view' | translate"
-                severity="secondary"
-                [outlined]="true"
-                [routerLink]="['/templates', template.id]"
-              />
-              <p-button
-                icon="pi pi-pencil"
-                severity="secondary"
-                [outlined]="true"
-                [routerLink]="['/templates', template.id, 'edit']"
-              />
-              <p-button
-                icon="pi pi-trash"
-                severity="danger"
-                [text]="true"
-              />
-            </div>
-          </ng-template>
-        </p-card>
-      } @empty {
-        <div class="empty-state">
-          <i class="pi pi-file"></i>
-          <h3>{{ 'templates.no_templates_found' | translate }}</h3>
-          <p>{{ 'templates.try_adjusting' | translate }}</p>
-        </div>
+    <p-dialog [header]="'templates.upload_dialog' | translate" [(visible)]="uploadDialogVisible" [modal]="true" [style]="{ width: '30rem' }">
+      <div class="field">
+        <label for="upload-name">{{ 'templates.name_label' | translate }}</label>
+        <input pInputText id="upload-name" type="text" [(ngModel)]="newName" class="w-full" />
+      </div>
+      <div class="field">
+        <label for="upload-description">{{ 'templates.description_label' | translate }}</label>
+        <input pInputText id="upload-description" type="text" [(ngModel)]="newDescription" class="w-full" />
+      </div>
+      <div class="field">
+        <label for="upload-report-type">{{ 'templates.report_type_label' | translate }}</label>
+        <p-select id="upload-report-type" [options]="reportTypeOptions" optionLabel="label" optionValue="value" [(ngModel)]="newReportType" class="w-full" />
+      </div>
+      <div class="field">
+        <label>{{ 'templates.file_label' | translate }}</label>
+        <p-button [label]="selectedFileName() || ('templates.choose_file' | translate)" icon="pi pi-upload" severity="secondary" [outlined]="true" (onClick)="fileInput.click()" />
+        <input #fileInput type="file" accept=".docx,.doc" hidden (change)="onFilePicked($event)" />
+      </div>
+      @if (uploadError()) {
+        <p class="upload-error">{{ uploadError() }}</p>
       }
-    </div>
+      <div class="dialog-actions">
+        <p-button [label]="'common.cancel' | translate" severity="secondary" (onClick)="uploadDialogVisible.set(false)" />
+        <p-button [label]="'templates.create' | translate" [loading]="uploading()" [disabled]="!newName || !selectedFile()" (onClick)="submitUpload()" />
+      </div>
+    </p-dialog>
   `,
   styles: `
+    .field {
+      margin-bottom: 1rem;
+    }
+    .field label {
+      display: block;
+      margin-bottom: 0.35rem;
+      font-size: 0.875rem;
+    }
+    .upload-error {
+      color: var(--p-red-500);
+      font-size: 0.875rem;
+    }
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
     .page-header {
       display: flex;
       justify-content: space-between;
@@ -209,58 +271,129 @@ import { TemplateCategory as Category } from '../../shared/models/template.model
     .empty-state p {
       margin: 0;
     }
+
+    .loading-state, .error-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem;
+      text-align: center;
+      color: var(--p-text-muted-color);
+    }
+
+    .loading-state i, .error-state i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .error-state {
+      color: var(--p-red-500);
+    }
   `,
 })
-export class TemplatesListComponent {
-  private readonly templateService = inject(TemplateService);
+export class TemplatesListComponent implements OnInit {
+  readonly templateService = inject(TemplateService);
   private readonly translate = inject(TranslateService);
+  private readonly fileService = inject(FileService);
+  private readonly router = inject(Router);
 
-  protected searchQuery = '';
-  protected selectedCategory: TemplateCategory | null = null;
-  protected readonly filteredTemplates = signal<Template[]>([]);
+  protected readonly uploadDialogVisible = signal(false);
+  protected readonly selectedFile = signal<File | null>(null);
+  protected readonly selectedFileName = computed(() => this.selectedFile()?.name ?? '');
+  protected readonly uploading = signal(false);
+  protected readonly uploadError = signal<string | null>(null);
+  protected newName = '';
+  protected newDescription = '';
+  protected newReportType: ReportType = ReportType.DIPLOMA;
 
-  protected readonly categoryOptions = [
-    { label: this.translate.instant('templates.category.annual'), value: Category.Annual },
-    { label: this.translate.instant('templates.category.research'), value: Category.Research },
-    { label: this.translate.instant('templates.category.accreditation'), value: Category.Accreditation },
-    { label: this.translate.instant('templates.category.compliance'), value: Category.Compliance },
-    { label: this.translate.instant('templates.category.custom'), value: Category.Custom },
-  ];
+  protected readonly searchQuery = signal('');
+  protected readonly selectedReportType = signal<ReportType | null>(null);
 
-  constructor() {
-    this.filterTemplates();
-  }
-
-  filterTemplates(): void {
+  protected readonly filteredTemplates = computed(() => {
     let templates = this.templateService.templates();
 
-    if (this.searchQuery) {
-      const query = this.searchQuery.toLowerCase();
+    const query = this.searchQuery().toLowerCase();
+    if (query) {
       templates = templates.filter(
         (t) => t.name.toLowerCase().includes(query) || t.description.toLowerCase().includes(query)
       );
     }
 
-    if (this.selectedCategory) {
-      templates = templates.filter((t) => t.category === this.selectedCategory);
+    const reportType = this.selectedReportType();
+    if (reportType !== null) {
+      templates = templates.filter((t) => t.reportType === reportType);
     }
 
-    this.filteredTemplates.set(templates);
+    return templates;
+  });
+
+  protected readonly Visibility = Visibility;
+
+  protected readonly reportTypeOptions = [
+    { label: this.translate.instant('templates.report_type.course'), value: ReportType.COURSE },
+    { label: this.translate.instant('templates.report_type.diploma'), value: ReportType.DIPLOMA },
+    { label: this.translate.instant('templates.report_type.practice'), value: ReportType.PRACTICE },
+    { label: this.translate.instant('templates.report_type.other'), value: ReportType.OTHER },
+  ];
+
+  ngOnInit(): void {
+    this.templateService.list(TemplateFilter.OWN);
   }
 
-  getCategorySeverity(
-    category: TemplateCategory
+  getReportTypeLabel(type: ReportType): string {
+    return getReportTypeLabel(type);
+  }
+
+  getReportTypeSeverity(
+    type: ReportType
   ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
-    const severities: Record<
-      TemplateCategory,
-      'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast'
-    > = {
-      [Category.Annual]: 'success',
-      [Category.Research]: 'info',
-      [Category.Accreditation]: 'warn',
-      [Category.Compliance]: 'danger',
-      [Category.Custom]: 'secondary',
-    };
-    return severities[category] ?? 'secondary';
+    return getReportTypeSeverity(type);
+  }
+
+  deleteTemplate(id: string): void {
+    this.templateService.remove(id);
+  }
+
+  openUploadDialog(): void {
+    this.newName = '';
+    this.newDescription = '';
+    this.newReportType = ReportType.DIPLOMA;
+    this.selectedFile.set(null);
+    this.uploadError.set(null);
+    this.uploadDialogVisible.set(true);
+  }
+
+  onFilePicked(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.selectedFile.set(input.files?.[0] ?? null);
+  }
+
+  async submitUpload(): Promise<void> {
+    const file = this.selectedFile();
+    if (!file || !this.newName) return;
+
+    this.uploading.set(true);
+    this.uploadError.set(null);
+    try {
+      const uploaded = await this.fileService.upload(file);
+      const { template } = await this.templateService.create(
+        this.newName,
+        this.newDescription,
+        this.newReportType,
+        uploaded.id
+      );
+      if (!template) {
+        this.uploadError.set(this.translate.instant('templates.upload_failed'));
+        return;
+      }
+      this.uploadDialogVisible.set(false);
+      await this.router.navigate(['/templates', template.id]);
+    } catch (err) {
+      console.error('Template upload failed', err);
+      this.uploadError.set(this.translate.instant('templates.upload_failed'));
+    } finally {
+      this.uploading.set(false);
+    }
   }
 }

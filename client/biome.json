@@ -23,6 +23,9 @@
       },
       "correctness": {
         "noUnusedVariables": "warn"
+      },
+      "complexity": {
+        "useLiteralKeys": "off"
       }
     }
   },
