@@ -1,3 +1,4 @@
+import { provideHttpClient } from '@angular/common/http';
 import { type ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
@@ -18,6 +19,7 @@ export const appConfig: ApplicationConfig = {
       },
     }),
     provideAnimations(),
+    provideHttpClient(),
     provideTranslateService({
       fallbackLang: 'en',
     }),

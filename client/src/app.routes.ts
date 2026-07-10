@@ -3,11 +3,10 @@ import { authGuard, guestGuard } from './app/core/guards/auth.guard';
 import { LoginComponent } from './app/features/auth/login/login.component';
 import { DashboardComponent } from './app/features/dashboard/dashboard.component';
 import { DocumentsListComponent } from './app/features/documents/documents-list.component';
-import { ProjectDetailComponent } from './app/features/projects/project-detail.component';
-import { ProjectsListComponent } from './app/features/projects/projects-list.component';
+import { DocumentEditorComponent } from './app/features/documents/editor/document-editor.component';
+import { SettingsComponent } from './app/features/settings/settings.component';
 import { TemplateDetailComponent } from './app/features/templates/template-detail.component';
 import { TemplatesListComponent } from './app/features/templates/templates-list.component';
-import { SettingsComponent } from './app/features/settings/settings.component';
 import { LayoutComponent } from './app/layout/layout.component';
 
 export const routes: Routes = [
@@ -45,17 +44,8 @@ export const routes: Routes = [
         component: DocumentsListComponent,
       },
       {
-        path: 'projects',
-        children: [
-          {
-            path: '',
-            component: ProjectsListComponent,
-          },
-          {
-            path: ':id',
-            component: ProjectDetailComponent,
-          },
-        ],
+        path: 'documents/:id',
+        component: DocumentEditorComponent,
       },
       {
         path: 'templates',
@@ -69,18 +59,6 @@ export const routes: Routes = [
             component: TemplateDetailComponent,
           },
         ],
-      },
-      {
-        path: 'universities',
-        component: DashboardComponent,
-      },
-      {
-        path: 'reports',
-        component: DashboardComponent,
-      },
-      {
-        path: 'team',
-        component: DashboardComponent,
       },
       {
         path: 'settings',

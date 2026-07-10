@@ -1,15 +1,33 @@
 import { GrpcWebFetchTransport } from '@protobuf-ts/grpcweb-transport';
-import type { MethodInfo, NextUnaryFn, RpcInterceptor, RpcOptions } from '@protobuf-ts/runtime-rpc';
+import type {
+  MethodInfo,
+  NextServerStreamingFn,
+  NextUnaryFn,
+  RpcInterceptor,
+  RpcOptions,
+} from '@protobuf-ts/runtime-rpc';
 import { environment } from '../../../environments/environment';
 import { accessToken } from './token-holder';
 
+function withAuthMeta(options: RpcOptions): RpcOptions {
+  const token = accessToken();
+  if (token) {
+    options.meta = { ...options.meta, authorization: `Bearer ${token}` };
+  }
+  return options;
+}
+
 const authInterceptor: RpcInterceptor = {
   interceptUnary(next: NextUnaryFn, method: MethodInfo, input: object, options: RpcOptions) {
-    const token = accessToken();
-    if (token) {
-      options.meta = { ...options.meta, authorization: `Bearer ${token}` };
-    }
-    return next(method, input, options);
+    return next(method, input, withAuthMeta(options));
+  },
+  interceptServerStreaming(
+    next: NextServerStreamingFn,
+    method: MethodInfo,
+    input: object,
+    options: RpcOptions
+  ) {
+    return next(method, input, withAuthMeta(options));
   },
 };
 
