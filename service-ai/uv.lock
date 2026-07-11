@@ -432,7 +432,7 @@ wheels = [
 [[package]]
 name = "service-ai"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "grpcio" },
     { name = "grpcio-tools" },
@@ -441,6 +441,7 @@ dependencies = [
     { name = "protobuf" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "shared-py" },
 ]
 
 [package.metadata]
@@ -452,6 +453,7 @@ requires-dist = [
     { name = "protobuf", specifier = ">=7.35.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
+    { name = "shared-py", editable = "../pkg/shared-py" },
 ]
 
 [[package]]
@@ -461,6 +463,25 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/34/26/f5d29e25ffdb535afef2d35cdb55b325298f96debd670da4c325e08d70f4/setuptools-83.0.0.tar.gz", hash = "sha256:025bccbbf0fa05b6192bc64ae1e7b16e001fd6d6d4d5de03c97b1c1ade523bef", size = 1154254, upload-time = "2026-07-04T15:31:22.699Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5d/40/e1e72872c6354b306daef1703549e8e83b4d43cfea356311bf722a043752/setuptools-83.0.0-py3-none-any.whl", hash = "sha256:29b23c360f22f414dc7336bb39178cc7bcbf6021ed2733cde173f09dba19abb3", size = 1008090, upload-time = "2026-07-04T15:31:20.885Z" },
+]
+
+[[package]]
+name = "shared-py"
+version = "0.1.0"
+source = { editable = "../pkg/shared-py" }
+dependencies = [
+    { name = "grpcio" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "python-dotenv" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "grpcio", specifier = ">=1.62.0" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pydantic-settings", specifier = ">=2.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
 ]
 
 [[package]]

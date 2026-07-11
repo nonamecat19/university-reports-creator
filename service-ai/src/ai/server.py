@@ -48,7 +48,7 @@ class AIServicer:
 
     # ── Ping ─────────────────────────────────────────────────────────
 
-    def Ping(self, request: Any, context: grpc.ServicerContext) -> Any:
+    async def Ping(self, request: Any, context: grpc.ServicerContext) -> Any:
         from ai.proto.ai_pb2 import PingResponse
 
         caps = self._provider.capabilities()

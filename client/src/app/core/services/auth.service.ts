@@ -139,6 +139,44 @@ export class AuthService {
     }
   }
 
+  /** Update profile fields (FR-AUTH-08). */
+  async updateProfile(fields: {
+    name?: string;
+    university?: string;
+    faculty?: string;
+    department?: string;
+    studentGroup?: string;
+    supervisor?: string;
+  }): Promise<boolean> {
+    try {
+      const resp = await this.client.updateProfile({
+        name: fields.name ?? '',
+        university: fields.university ?? '',
+        faculty: fields.faculty ?? '',
+        department: fields.department ?? '',
+        studentGroup: fields.studentGroup ?? '',
+        supervisor: fields.supervisor ?? '',
+      }).response;
+      if (resp.profile) {
+        const user: User = {
+          id: resp.profile.userId,
+          email: resp.profile.email,
+          name: resp.profile.name,
+          university: resp.profile.university,
+          faculty: resp.profile.faculty,
+          department: resp.profile.department,
+          studentGroup: resp.profile.studentGroup,
+          supervisor: resp.profile.supervisor,
+        };
+        this._user.set(user);
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to update profile', error);
+      return false;
+    }
+  }
+
   /** Calls fn, and on UNAUTHENTICATED attempts one silent refresh + retry
    * (FR-AUTH-10) before giving up and redirecting to /auth/login. */
   async callWithAuthRetry<T>(fn: () => Promise<T>): Promise<T> {

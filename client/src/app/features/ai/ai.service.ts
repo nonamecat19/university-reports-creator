@@ -1,7 +1,13 @@
 import { Injectable, signal, computed } from '@angular/core';
+import { AIServiceClient } from '@gen/ai/ai.client';
+import { RpcError } from '@protobuf-ts/runtime-rpc';
+import {
+  FindingSeverity,
+  FindingCategory,
+  GrammarTier,
+} from '@gen/ai/ai';
 import type {
   AIGenerationRequest,
-  AIGenerationChunk,
   AIAnalysisFinding,
   AIGrammarSuggestion,
   AISourceSuggestion,
@@ -12,15 +18,50 @@ import type {
 import { AIAction } from '../../shared/models/ai.model';
 import { grpcTransport } from '../../core/grpc/transport';
 
+const SEVERITY_MAP: Record<FindingSeverity, AIAnalysisFinding['severity']> = {
+  [FindingSeverity.UNSPECIFIED]: 'info',
+  [FindingSeverity.INFO]: 'info',
+  [FindingSeverity.WARNING]: 'warning',
+  [FindingSeverity.ERROR]: 'error',
+};
+
+const CATEGORY_MAP: Record<FindingCategory, AIAnalysisFinding['category']> = {
+  [FindingCategory.UNSPECIFIED]: 'formatting',
+  [FindingCategory.STRUCTURE]: 'structure',
+  [FindingCategory.TOPIC_RELEVANCE]: 'topic_relevance',
+  [FindingCategory.CONCLUSIONS]: 'conclusions',
+  [FindingCategory.COHERENCE]: 'coherence',
+  [FindingCategory.FORMATTING]: 'formatting',
+};
+
+const TIER_MAP: Record<GrammarTier, AIGrammarSuggestion['tier']> = {
+  [GrammarTier.UNSPECIFIED]: 'language_tool',
+  [GrammarTier.LANGUAGE_TOOL]: 'language_tool',
+  [GrammarTier.LLM_STYLE]: 'llm_style',
+};
+
+function formatFindings(findings: AIAnalysisFinding[]): string {
+  if (findings.length === 0) return 'No issues found.';
+  return findings
+    .map((f) => `[${f.severity}] ${f.category}: ${f.message}${f.anchorText ? ` — "${f.anchorText}"` : ''}`)
+    .join('\n');
+}
+
+function formatGrammarSuggestions(suggestions: AIGrammarSuggestion[]): string {
+  if (suggestions.length === 0) return 'No grammar issues found.';
+  return suggestions
+    .map((s) => `"${s.original}" → "${s.replacement}" — ${s.message}`)
+    .join('\n');
+}
+
 /**
  * AI service wrapping service-ai gRPC calls via the gateway proxy.
  * Uses gRPC-web transport for browser-compatible communication.
- *
- * NOTE: Once proto stubs are generated from proto/ai/ai.proto,
- * replace the raw fetch calls with the generated AIServiceClient.
  */
 @Injectable({ providedIn: 'root' })
 export class AiService {
+  private readonly client = new AIServiceClient(grpcTransport);
+
   private readonly _runs = signal<AIRun[]>([]);
   private readonly _isStreaming = signal(false);
   private readonly _abortController = signal<AbortController | null>(null);
@@ -52,54 +93,25 @@ export class AiService {
     this._abortController.set(controller);
 
     try {
-      const response = await fetch('http://localhost:8080/ai.AIService/GenerateTextStream', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const call = this.client.generateTextStream(
+        {
+          userId: '',
+          sessionId: request.sessionId ?? '',
           prompt: request.prompt,
           systemPrompt: request.systemPrompt ?? '',
           temperature: request.temperature ?? 0.7,
           maxTokens: request.maxTokens ?? 4096,
           jsonMode: request.jsonMode ?? false,
-          sessionId: request.sessionId ?? '',
-          userId: '',
-        }),
-        signal: controller.signal,
-      });
+          jsonSchema: '',
+        },
+        { abort: controller.signal }
+      );
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No response body');
-
-      const decoder = new TextDecoder();
       let output = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const text = decoder.decode(value, { stream: true });
-        // Parse SSE-style chunks
-        const lines = text.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const chunk: AIGenerationChunk = JSON.parse(line.slice(6));
-              output += chunk.delta;
-              this._runs.update((runs) =>
-                runs.map((r) => (r.id === runId ? { ...r, output } : r))
-              );
-              if (chunk.done) break;
-            } catch {
-              // Skip malformed chunks
-            }
-          }
-        }
+      for await (const chunk of call.responses) {
+        output += chunk.delta;
+        this._runs.update((runs) => runs.map((r) => (r.id === runId ? { ...r, output } : r)));
+        if (chunk.done) break;
       }
 
       this._runs.update((runs) =>
@@ -110,7 +122,9 @@ export class AiService {
 
       return output;
     } catch (error: any) {
-      if (error.name === 'AbortError') {
+      // protobuf-ts wraps an aborted call as `RpcError` with code CANCELLED,
+      // not a native AbortError DOMException.
+      if (error instanceof RpcError && error.code === 'CANCELLED') {
         this._runs.update((runs) =>
           runs.map((r) =>
             r.id === runId ? { ...r, status: 'cancelled', completedAt: new Date() } : r
@@ -165,15 +179,29 @@ export class AiService {
     };
 
     this._runs.update((runs) => [run, ...runs]);
+    this._isStreaming.set(true);
 
     try {
-      // TODO: Replace with generated proto client call
-      // const client = new AIServiceClient(grpcTransport);
-      // const stream = client.analyzeDocument({...});
-      // For now, use mock response
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const call = this.client.analyzeDocument({
+        userId: '',
+        documentId,
+        content,
+        topic,
+        reportType,
+        sections: sections.map((s) => ({ id: s.id, title: s.title, content: s.content })),
+      });
 
       const findings: AIAnalysisFinding[] = [];
+      for await (const f of call.responses) {
+        findings.push({
+          sectionId: f.sectionId,
+          anchorText: f.anchorText,
+          severity: SEVERITY_MAP[f.severity],
+          category: CATEGORY_MAP[f.category],
+          message: f.message,
+          ordinal: f.ordinal,
+        });
+      }
 
       this._runs.update((runs) =>
         runs.map((r) =>
@@ -182,7 +210,7 @@ export class AiService {
                 ...r,
                 status: 'completed',
                 completedAt: new Date(),
-                output: JSON.stringify(findings, null, 2),
+                output: formatFindings(findings),
               }
             : r
         )
@@ -198,6 +226,8 @@ export class AiService {
         )
       );
       throw error;
+    } finally {
+      this._isStreaming.set(false);
     }
   }
 
@@ -221,12 +251,28 @@ export class AiService {
     };
 
     this._runs.update((runs) => [run, ...runs]);
+    this._isStreaming.set(true);
 
     try {
-      // TODO: Replace with generated proto client call
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      const call = this.client.correctGrammar({
+        userId: '',
+        text,
+        language,
+        includeStyle,
+      });
 
       const suggestions: AIGrammarSuggestion[] = [];
+      for await (const s of call.responses) {
+        suggestions.push({
+          offset: s.offset,
+          length: s.length,
+          original: s.original,
+          replacement: s.replacement,
+          message: s.message,
+          tier: TIER_MAP[s.tier],
+          ruleId: s.ruleId,
+        });
+      }
 
       this._runs.update((runs) =>
         runs.map((r) =>
@@ -235,7 +281,7 @@ export class AiService {
                 ...r,
                 status: 'completed',
                 completedAt: new Date(),
-                output: JSON.stringify(suggestions, null, 2),
+                output: formatGrammarSuggestions(suggestions),
               }
             : r
         )
@@ -251,6 +297,8 @@ export class AiService {
         )
       );
       throw error;
+    } finally {
+      this._isStreaming.set(false);
     }
   }
 
@@ -276,10 +324,35 @@ export class AiService {
     this._runs.update((runs) => [run, ...runs]);
 
     try {
-      // TODO: Replace with generated proto client call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const call = this.client.findSources({
+        userId: '',
+        sectionText,
+        topic,
+        citations: citations.map((c) => ({
+          claim: c.claim,
+          sourceTitle: c.sourceTitle,
+          sourceAbstract: c.sourceAbstract,
+        })),
+      });
 
       const suggestions: AISourceSuggestion[] = [];
+      for await (const s of call.responses) {
+        suggestions.push({
+          searchQueries: s.searchQueries,
+          candidates: s.candidates.map((c) => ({
+            title: c.title,
+            authors: c.authors,
+            year: c.year,
+            url: c.url,
+          })),
+          warnings: s.warnings.map((w) => ({
+            claim: w.claim,
+            sourceTitle: w.sourceTitle,
+            message: w.message,
+          })),
+          done: s.done,
+        });
+      }
 
       this._runs.update((runs) =>
         runs.map((r) =>
@@ -325,15 +398,14 @@ export class AiService {
     this._runs.update((runs) => [run, ...runs]);
 
     try {
-      // TODO: Replace with generated proto client call
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      const resp = await this.client.parseReference({ userId: '', rawText }).response;
 
       const result: AIReferenceParseResult = {
-        cslJson: '{}',
-        title: '',
-        authors: '',
-        year: '',
-        confidence: false,
+        cslJson: resp.cslJson,
+        title: resp.title,
+        authors: resp.authors,
+        year: resp.year,
+        confidence: resp.confidence,
       };
 
       this._runs.update((runs) =>
@@ -367,8 +439,8 @@ export class AiService {
    */
   async ping(): Promise<AIPingResult> {
     try {
-      // TODO: Replace with generated proto client call
-      return { status: 'ok', provider: 'ollama', model: 'gemma3:8b' };
+      const resp = await this.client.ping({}).response;
+      return { status: resp.status, provider: resp.provider, model: resp.model };
     } catch {
       return { status: 'unavailable', provider: 'unknown', model: 'unknown' };
     }

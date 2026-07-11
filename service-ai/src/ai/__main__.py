@@ -18,7 +18,7 @@ from shared.logging import setup_logging
 
 def generate_proto_stubs() -> None:
     """Generate Python proto stubs from .proto files if not already present."""
-    proto_dir = Path(__file__).parent.parent.parent / "proto" / "ai"
+    proto_dir = Path(__file__).parent.parent.parent.parent / "proto" / "ai"
     output_dir = Path(__file__).parent / "proto"
 
     if output_dir.exists() and list(output_dir.glob("*.py")):
@@ -27,18 +27,22 @@ def generate_proto_stubs() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        import grpc_tools
         from grpc_tools import protoc
 
         proto_file = proto_dir / "ai.proto"
         if not proto_file.exists():
             raise FileNotFoundError(f"Proto file not found: {proto_file}")
 
+        well_known_types_dir = Path(grpc_tools.__file__).parent / "_proto"
+
         result = protoc.main([
             "grpc_tools.protoc",
-            f"-I{proto_dir.parent.parent}",
+            f"-I{proto_dir}",
+            f"-I{well_known_types_dir}",
             f"--python_out={output_dir}",
             f"--grpc_python_out={output_dir}",
-            str(proto_file),
+            proto_file.name,
         ])
 
         if result != 0:
@@ -61,8 +65,9 @@ def generate_proto_stubs() -> None:
         raise
 
 
-def main() -> None:
-    """Main entry point for service-ai."""
+async def serve() -> None:
+    """Async entry point for service-ai (AIServicer's RPC handlers are coroutines/
+    async generators, so this must run under grpc.aio rather than the sync grpc.server)."""
     cfg = get_config(AIConfig)
     setup_logging(level=cfg.log_level, json_format=cfg.json_logging)
 
@@ -89,31 +94,29 @@ def main() -> None:
     servicer = AIServicer(provider=provider, config=cfg)
 
     # Create gRPC server
-    server = grpc.server(
-        __import__("concurrent.futures", fromlist=["ThreadPoolExecutor"]).ThreadPoolExecutor(
-            max_workers=cfg.max_workers
-        )
-    )
-
+    server = grpc.aio.server()
     ai_pb2_grpc.add_AIServiceServicer_to_server(servicer, server)
     server.add_insecure_port(f"[::]:{cfg.port}")
 
-    # Graceful shutdown
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    await server.start()
+    print(f"service-ai started on port {cfg.port} (provider={cfg.ai_provider}, model={cfg.ai_model})")
+
+    stop_event = asyncio.Event()
 
     def shutdown(signum: int, frame: object) -> None:
         print(f"\nReceived signal {signum}, shutting down...")
-        server.stop(grace=5)
-        sys.exit(0)
+        stop_event.set()
 
     import signal
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    server.start()
-    print(f"service-ai started on port {cfg.port} (provider={cfg.ai_provider}, model={cfg.ai_model})")
-    server.wait_for_termination()
+    await stop_event.wait()
+    await server.stop(grace=5)
+
+
+def main() -> None:
+    asyncio.run(serve())
 
 
 if __name__ == "__main__":

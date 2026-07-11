@@ -33,12 +33,13 @@ import {
             severity="danger"
             (onClick)="cancelGeneration()"
             pTooltip="Cancel generation"
+            data-testid="ai-cancel-btn"
           />
         }
       </div>
 
       <!-- Quick actions -->
-      <div class="ai-actions">
+      <div class="ai-actions" data-testid="ai-quick-actions">
         @for (action of quickActions; track action) {
           <p-button
             [label]="actionLabels[action]"
@@ -48,6 +49,7 @@ import {
             (onClick)="selectAction(action)"
             [class.active]="selectedAction() === action"
             styleClass="ai-action-btn"
+            [attr.data-testid]="'ai-action-' + action"
           />
         }
       </div>
@@ -61,6 +63,7 @@ import {
           rows="3"
           class="ai-input"
           [disabled]="aiService.isStreaming()"
+          data-testid="ai-input"
         ></textarea>
 
         <div class="ai-input-actions">
@@ -70,13 +73,14 @@ import {
             [disabled]="!canSend() || aiService.isStreaming()"
             (onClick)="send()"
             styleClass="send-btn"
+            data-testid="ai-send-btn"
           />
         </div>
       </div>
 
       <!-- Streaming output -->
       @if (aiService.isStreaming() && currentOutput()) {
-        <div class="ai-output streaming">
+        <div class="ai-output streaming" data-testid="ai-streaming-output">
           <div class="ai-output-header">
             <p-progressSpinner strokeWidth="2" [style]="{ width: '16px', height: '16px' }" />
             <span>Generating...</span>
@@ -89,7 +93,7 @@ import {
 
       <!-- Run history -->
       @if (completedRuns().length > 0) {
-        <div class="ai-history">
+        <div class="ai-history" data-testid="ai-history">
           <div class="ai-history-header">
             <span>History</span>
             <p-button
@@ -99,11 +103,12 @@ import {
               severity="secondary"
               (onClick)="aiService.clearHistory()"
               pTooltip="Clear history"
+              data-testid="ai-clear-history-btn"
             />
           </div>
 
           @for (run of completedRuns(); track run.id) {
-            <div class="ai-run" [class.error]="run.status === 'error'" [class.cancelled]="run.status === 'cancelled'">
+            <div class="ai-run" [class.error]="run.status === 'error'" [class.cancelled]="run.status === 'cancelled'" data-testid="ai-history-run">
               <div class="ai-run-header">
                 <p-tag
                   [value]="actionLabels[run.action]"
@@ -358,12 +363,18 @@ export class AiTabComponent {
     const action = this.selectedAction();
 
     try {
-      await this.aiService.generateStream({
-        action,
-        prompt,
-        temperature: action === AIAction.GRAMMAR ? 0.3 : 0.7,
-        maxTokens: 4096,
-      });
+      if (action === AIAction.ANALYZE) {
+        await this.aiService.analyzeDocument('', prompt, '', '', []);
+      } else if (action === AIAction.GRAMMAR) {
+        await this.aiService.checkGrammar(prompt, 'uk', true);
+      } else {
+        await this.aiService.generateStream({
+          action,
+          prompt,
+          temperature: 0.7,
+          maxTokens: 4096,
+        });
+      }
 
       this.inputText.set('');
     } catch (error) {
