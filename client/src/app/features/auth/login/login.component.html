@@ -11,8 +11,9 @@
     @if (errorMessage()) {
       <p-message
         severity="error"
-        [text]="errorMessage()"
+        [text]="errorMessage() | translate"
         styleClass="mb-4 w-full"
+        data-testid="login-error"
       />
     }
 
@@ -29,6 +30,7 @@
             placeholder="Enter your name"
             class="w-full"
             required
+            data-testid="login-name-input"
           />
         </div>
       }
@@ -44,6 +46,7 @@
           placeholder="Enter your email"
           class="w-full"
           required
+          data-testid="login-email-input"
         />
       </div>
 
@@ -58,6 +61,7 @@
           [toggleMask]="true"
           styleClass="w-full"
           required
+          data-testid="login-password-input"
         />
       </div>
 
@@ -73,6 +77,7 @@
         [loading]="isLoading()"
         [disabled]="!email || !password"
         styleClass="w-full"
+        data-testid="login-submit"
       />
 
       <div class="divider">
@@ -86,6 +91,7 @@
         (onClick)="onGoogleSignIn()"
         styleClass="w-full google-btn"
         [icon]="'pi pi-google'"
+        data-testid="login-google-btn"
       />
     </form>
 
@@ -93,10 +99,10 @@
       <div class="card-footer">
         @if (mode() === 'login') {
           <span>Don't have an account?</span>
-          <a href="#" (click)="toggleMode(); $event.preventDefault()">Create one</a>
+          <a href="#" (click)="toggleMode(); $event.preventDefault()" data-testid="login-toggle-mode">Create one</a>
         } @else {
           <span>Already have an account?</span>
-          <a href="#" (click)="toggleMode(); $event.preventDefault()">Sign in</a>
+          <a href="#" (click)="toggleMode(); $event.preventDefault()" data-testid="login-toggle-mode">Sign in</a>
         }
       </div>
     </ng-template>

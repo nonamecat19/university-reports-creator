@@ -6,19 +6,13 @@ import { Card } from 'primeng/card';
 import { InputText } from 'primeng/inputtext';
 import { Message } from 'primeng/message';
 import { Password } from 'primeng/password';
+import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
 import { LanguageService } from '../../../core/services/language.service';
 
 @Component({
   selector: 'app-login',
-  imports: [
-    FormsModule,
-    Card,
-    InputText,
-    Password,
-    Button,
-    Message,
-  ],
+  imports: [FormsModule, Card, InputText, Password, Button, Message, TranslatePipe],
   templateUrl: './login.component.html',
   styleUrl: './login.component.css',
 })
@@ -70,7 +64,7 @@ export class LoginComponent {
       this.router.navigate(['/dashboard']);
     } else {
       this.errorMessage.set(
-        this.mode() === 'register' ? 'login.could_not_create_account' : 'login.invalid_credentials',
+        this.mode() === 'register' ? 'login.could_not_create_account' : 'login.invalid_credentials'
       );
     }
   }

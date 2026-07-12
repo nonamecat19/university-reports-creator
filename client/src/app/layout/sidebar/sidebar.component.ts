@@ -13,6 +13,7 @@ import { TranslatePipe } from '@ngx-translate/core';
           routerLink="/dashboard"
           routerLinkActive="active"
           [title]="'sidebar.dashboard' | translate"
+          data-testid="sidebar-dashboard"
         >
           <i class="pi pi-home"></i>
           @if (!collapsed()) {
@@ -24,6 +25,7 @@ import { TranslatePipe } from '@ngx-translate/core';
           routerLink="/documents"
           routerLinkActive="active"
           [title]="'sidebar.documents' | translate"
+          data-testid="sidebar-documents"
         >
           <i class="pi pi-file-edit"></i>
           @if (!collapsed()) {
@@ -32,20 +34,10 @@ import { TranslatePipe } from '@ngx-translate/core';
         </a>
         <a
           class="nav-item"
-          routerLink="/projects"
-          routerLinkActive="active"
-          [title]="'sidebar.projects' | translate"
-        >
-          <i class="pi pi-briefcase"></i>
-          @if (!collapsed()) {
-            <span class="nav-label">{{ 'sidebar.projects' | translate }}</span>
-          }
-        </a>
-        <a
-          class="nav-item"
           routerLink="/templates"
           routerLinkActive="active"
           [title]="'sidebar.templates' | translate"
+          data-testid="sidebar-templates"
         >
           <i class="pi pi-file"></i>
           @if (!collapsed()) {
@@ -54,42 +46,10 @@ import { TranslatePipe } from '@ngx-translate/core';
         </a>
         <a
           class="nav-item"
-          routerLink="/universities"
-          routerLinkActive="active"
-          [title]="'sidebar.universities' | translate"
-        >
-          <i class="pi pi-building"></i>
-          @if (!collapsed()) {
-            <span class="nav-label">{{ 'sidebar.universities' | translate }}</span>
-          }
-        </a>
-        <a
-          class="nav-item"
-          routerLink="/reports"
-          routerLinkActive="active"
-          [title]="'sidebar.reports' | translate"
-        >
-          <i class="pi pi-chart-bar"></i>
-          @if (!collapsed()) {
-            <span class="nav-label">{{ 'sidebar.reports' | translate }}</span>
-          }
-        </a>
-        <a
-          class="nav-item"
-          routerLink="/team"
-          routerLinkActive="active"
-          [title]="'sidebar.team' | translate"
-        >
-          <i class="pi pi-users"></i>
-          @if (!collapsed()) {
-            <span class="nav-label">{{ 'sidebar.team' | translate }}</span>
-          }
-        </a>
-        <a
-          class="nav-item"
           routerLink="/settings"
           routerLinkActive="active"
           [title]="'sidebar.settings' | translate"
+          data-testid="sidebar-settings"
         >
           <i class="pi pi-cog"></i>
           @if (!collapsed()) {

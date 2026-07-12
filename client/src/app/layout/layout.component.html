@@ -10,7 +10,7 @@
         <app-ai-tab />
       </aside>
     }
-    <button class="ai-toggle" (click)="toggleAiPanel()" [class.active]="aiPanelVisible()">
+    <button class="ai-toggle" type="button" (click)="toggleAiPanel()" [class.active]="aiPanelVisible()" data-testid="ai-panel-toggle">
       <i class="pi pi-sparkles"></i>
     </button>
   </div>

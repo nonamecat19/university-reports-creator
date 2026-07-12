@@ -9,7 +9,7 @@
     <button type="button" class="icon-btn">
       <i class="pi pi-bell"></i>
     </button>
-    <div class="user-menu" (click)="toggleMenu()">
+    <div class="user-menu" (click)="toggleMenu()" data-testid="header-user-menu">
       <p-avatar
         [label]="userInitial()"
         shape="circle"
@@ -34,7 +34,7 @@
           <span>{{ 'header.settings' | translate }}</span>
         </button>
         <div class="menu-divider"></div>
-        <button type="button" class="menu-item logout" (click)="logout()">
+        <button type="button" class="menu-item logout" (click)="logout()" data-testid="header-logout-btn">
           <i class="pi pi-sign-out"></i>
           <span>{{ 'header.logout' | translate }}</span>
         </button>
