@@ -48,17 +48,12 @@
   "dashboard": {
     "welcome_back": "Вітаємо, {{name}}",
     "subtitle": "Ось що відбувається з вашими звітами",
-    "new_project": "Новий проєкт",
-    "active_projects": "Активні проєкти",
-    "completed": "Завершено",
-    "under_review": "На перевірці",
+    "new_document": "Новий документ",
     "templates": "Шаблони",
-    "recent_projects": "Останні проєкти",
-    "no_recent_projects": "Немає нещодавніх проєктів",
-    "view_all": "Переглянути все",
-    "popular_templates": "Популярні шаблони",
+    "documents": "Документи",
+    "recent_templates": "Останні шаблони",
     "no_templates_available": "Шаблони відсутні",
-    "uses": "{{count}} використань"
+    "view_all": "Переглянути все"
   },
 
   "documents": {
@@ -73,6 +68,44 @@
     "cancel": "Скасувати",
     "create": "Створити",
     "save": "Зберегти"
+  },
+
+  "editor": {
+    "loading": "Завантаження документа…",
+    "not_found": "Документ не знайдено",
+    "outline_title": "Розділи",
+    "add_section": "Додати розділ",
+    "add_section_dialog": "Новий розділ",
+    "section_title_label": "Назва розділу",
+    "section_kind_label": "Тип",
+    "section_kind_chapter": "Розділ",
+    "section_kind_appendix": "Додаток",
+    "required_empty": "Обов'язковий розділ порожній",
+    "word_count": "{{count}} слів",
+    "page_estimate": "~{{count}} стор. (оцінка)",
+    "status": {
+      "saved": "Збережено",
+      "saving": "Збереження…",
+      "error": "Помилка збереження",
+      "retry": "Повторити"
+    },
+    "metadata": {
+      "student_name": "ПІБ студента",
+      "university": "Університет",
+      "faculty": "Факультет",
+      "department": "Кафедра",
+      "group": "Група",
+      "supervisor": "Науковий керівник",
+      "topic": "Тема роботи",
+      "city": "Місто",
+      "year": "Рік"
+    },
+    "export": "Експорт",
+    "export_dialog": "Експорт документа",
+    "export_format_label": "Формат",
+    "export_format_docx": "Тільки DOCX",
+    "export_format_docx_pdf": "DOCX + PDF",
+    "export_done": "Готово. Завантажте файли нижче:"
   },
 
   "projects": {
@@ -137,13 +170,29 @@
     "subtitle": "Керуйте шаблонами звітів для ваших університетських звітів",
     "new_template": "Новий шаблон",
     "search_placeholder": "Пошук шаблонів...",
+    "all_types": "Усі типи",
     "all_categories": "Усі категорії",
+    "loading": "Завантаження…",
+    "version": "v{{version}}",
     "fields": "{{count}} полів",
     "uses": "{{count}} використань",
+    "public": "Публічний",
     "private": "Приватний",
     "view": "Переглянути",
     "no_templates_found": "Шаблонів не знайдено",
     "try_adjusting": "Спробуйте змінити пошуковий запит або фільтри",
+    "report_type": {
+      "unspecified": "Не вказано",
+      "course": "Курсова",
+      "diploma": "Дипломна",
+      "practice": "Практика",
+      "other": "Інше"
+    },
+    "visibility": {
+      "unspecified": "Не вказано",
+      "private": "Приватний",
+      "public": "Публічний"
+    },
     "category": {
       "annual": "Річні",
       "annual_reports": "Річні звіти",
@@ -151,27 +200,45 @@
       "accreditation": "Акредитація",
       "compliance": "Відповідність",
       "custom": "Інше"
-    }
+    },
+    "upload_dialog": "Завантажити шаблон",
+    "name_label": "Назва",
+    "description_label": "Опис",
+    "report_type_label": "Тип звіту",
+    "file_label": "Файл шаблону (.docx)",
+    "choose_file": "Обрати файл",
+    "create": "Завантажити та розібрати",
+    "upload_failed": "Не вдалося завантажити або розібрати шаблон"
   },
 
   "template_detail": {
     "edit_template": "Редагувати шаблон",
     "use_template": "Використати шаблон",
+    "loading": "Завантаження…",
     "template_info": "Інформація про шаблон",
     "category": "Категорія",
+    "report_type": "Тип звіту",
     "visibility": "Видимість",
+    "version": "Версія",
     "public": "Публічний",
     "private": "Приватний",
     "author": "Автор",
+    "owner_id": "Власник",
     "usage_count": "Кількість використань",
     "times": "{{count}} разів",
     "created": "Створено",
     "last_updated": "Останнє оновлення",
+    "template_model": "Модель шаблону",
+    "no_model": "Модель ще не завантажена",
     "form_fields": "Поля форми ({{count}})",
     "required": "Обов'язкове",
     "options": "{{count}} опцій",
     "template_not_found": "Шаблон не знайдено",
     "back_to_templates": "Повернутися до шаблонів",
+    "confirm": "Підтвердити шаблон",
+    "confirm_first": "Спочатку підтвердьте шаблон",
+    "use_template_dialog": "Новий документ із шаблону",
+    "document_title_label": "Назва документа",
     "field_type": {
       "text": "Текст",
       "textarea": "Текстове поле",
@@ -190,7 +257,27 @@
     "language": "Мова",
     "language_description": "Оберіть бажану мову інтерфейсу",
     "english": "English",
-    "ukrainian": "Українська"
+    "ukrainian": "Українська",
+    "profile": {
+      "title": "Профіль",
+      "name": "Ім'я",
+      "name_placeholder": "Введіть ваше ім'я",
+      "university": "Університет",
+      "university_placeholder": "Введіть ваш університет",
+      "faculty": "Факультет",
+      "faculty_placeholder": "Введіть ваш факультет",
+      "department": "Кафедра",
+      "department_placeholder": "Введіть вашу кафедру",
+      "student_group": "Група",
+      "student_group_placeholder": "Введіть вашу групу",
+      "supervisor": "Науковий керівник",
+      "supervisor_placeholder": "Введіть вашого наукового керівника",
+      "save": "Зберегти",
+      "updated_summary": "Профіль оновлено",
+      "updated_detail": "Ваш профіль успішно збережено.",
+      "error_summary": "Помилка",
+      "error_detail": "Не вдалося зберегти профіль. Спробуйте ще раз."
+    }
   },
 
   "common": {
