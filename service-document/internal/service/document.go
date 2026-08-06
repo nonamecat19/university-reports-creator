@@ -87,12 +87,7 @@ func (s *DocumentService) CreateDocument(ctx context.Context, req *pb.CreateDocu
 }
 
 func (s *DocumentService) GetDocument(ctx context.Context, req *pb.GetDocumentRequest) (*pb.DocumentResponse, error) {
-	ownerID, err := requireUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	doc, err := s.Repos.Document.GetOwned(ctx, req.GetId(), ownerID)
+	doc, role, err := s.requireAccess(ctx, req.GetId(), pb.Role_ROLE_VIEWER)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +102,7 @@ func (s *DocumentService) GetDocument(ctx context.Context, req *pb.GetDocumentRe
 	}
 
 	return &pb.DocumentResponse{
-		Document: documentToProto(doc, pb.Role_ROLE_OWNER),
+		Document: documentToProto(doc, role),
 		Sections: pbSections,
 	}, nil
 }
@@ -118,10 +113,8 @@ func (s *DocumentService) ListDocuments(ctx context.Context, req *pb.ListDocumen
 		return nil, err
 	}
 
-	// Shared documents (FR-API-07 filter=shared) land with review mode (P4);
-	// P1 only has owned documents.
 	if req.GetFilter() == pb.DocumentFilter_DOCUMENT_FILTER_SHARED {
-		return &pb.ListDocumentsResponse{}, nil
+		return s.listSharedDocuments(ctx, ownerID)
 	}
 
 	docs, nextToken, total, err := s.Repos.Document.List(ctx, ownerID, int(req.GetPageSize()), req.GetPageToken())
@@ -142,30 +135,30 @@ func (s *DocumentService) ListDocuments(ctx context.Context, req *pb.ListDocumen
 }
 
 func (s *DocumentService) RenameDocument(ctx context.Context, req *pb.RenameDocumentRequest) (*pb.DocumentResponse, error) {
-	ownerID, err := requireUserID(ctx)
+	current, role, err := s.requireAccess(ctx, req.GetId(), pb.Role_ROLE_EDITOR)
 	if err != nil {
 		return nil, err
 	}
-	doc, err := s.Repos.Document.Rename(ctx, req.GetId(), ownerID, req.GetTitle())
+	doc, err := s.Repos.Document.Rename(ctx, req.GetId(), current.OwnerID, req.GetTitle())
 	if err != nil {
 		return nil, err
 	}
-	return &pb.DocumentResponse{Document: documentToProto(doc, pb.Role_ROLE_OWNER)}, nil
+	return &pb.DocumentResponse{Document: documentToProto(doc, role)}, nil
 }
 
 func (s *DocumentService) UpdateMetadata(ctx context.Context, req *pb.UpdateMetadataRequest) (*pb.DocumentResponse, error) {
-	ownerID, err := requireUserID(ctx)
+	current, role, err := s.requireAccess(ctx, req.GetId(), pb.Role_ROLE_EDITOR)
 	if err != nil {
 		return nil, err
 	}
-	doc, err := s.Repos.Document.UpdateMetadata(ctx, req.GetId(), ownerID, req.GetValues(), int(req.GetMetadataRevision()))
+	doc, err := s.Repos.Document.UpdateMetadata(ctx, req.GetId(), current.OwnerID, req.GetValues(), int(req.GetMetadataRevision()))
 	if err != nil {
 		if errors.Is(err, repository.ErrStaleRevision) {
 			return nil, s.staleMetadataRevisionErr(ctx, req.GetId())
 		}
 		return nil, err
 	}
-	return &pb.DocumentResponse{Document: documentToProto(doc, pb.Role_ROLE_OWNER)}, nil
+	return &pb.DocumentResponse{Document: documentToProto(doc, role)}, nil
 }
 
 func (s *DocumentService) staleMetadataRevisionErr(ctx context.Context, id string) error {
@@ -176,7 +169,8 @@ func (s *DocumentService) staleMetadataRevisionErr(ctx context.Context, id strin
 }
 
 func (s *DocumentService) UpdateSettings(ctx context.Context, req *pb.UpdateSettingsRequest) (*pb.DocumentResponse, error) {
-	ownerID, err := requireUserID(ctx)
+	// Export/citation settings are the owner's call (FR-REV-04).
+	current, _, err := s.requireAccess(ctx, req.GetId(), pb.Role_ROLE_OWNER)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +183,7 @@ func (s *DocumentService) UpdateSettings(ctx context.Context, req *pb.UpdateSett
 			TableContinuation: reqSettings.GetTableContinuation(),
 		}
 	}
-	doc, err := s.Repos.Document.UpdateSettings(ctx, req.GetId(), ownerID, settings, int(req.GetMetadataRevision()))
+	doc, err := s.Repos.Document.UpdateSettings(ctx, req.GetId(), current.OwnerID, settings, int(req.GetMetadataRevision()))
 	if err != nil {
 		if errors.Is(err, repository.ErrStaleRevision) {
 			return nil, s.staleMetadataRevisionErr(ctx, req.GetId())
@@ -200,11 +194,7 @@ func (s *DocumentService) UpdateSettings(ctx context.Context, req *pb.UpdateSett
 }
 
 func (s *DocumentService) UpdateSection(ctx context.Context, req *pb.UpdateSectionRequest) (*pb.SectionResponse, error) {
-	ownerID, err := requireUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.Repos.Document.GetOwned(ctx, req.GetDocumentId(), ownerID); err != nil {
+	if _, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_EDITOR); err != nil {
 		return nil, err
 	}
 
@@ -228,15 +218,47 @@ func (s *DocumentService) UpdateSection(ctx context.Context, req *pb.UpdateSecti
 		}
 		return nil, status.Errorf(codes.Internal, "failed to update section: %v", err)
 	}
+
+	// FR-REV-06: a comment whose anchor block was deleted degrades to
+	// "orphaned" (listed at section level) instead of being lost, and comes
+	// back if the block does.
+	if err := s.Repos.Comment.SetOrphanedByBlocks(ctx, req.GetDocumentId(), req.GetSectionId(), collectBlockIDs(content)); err != nil {
+		slog.WarnContext(ctx, "failed to reconcile comment anchors", "section_id", req.GetSectionId(), "error", err)
+	}
+
 	return &pb.SectionResponse{Section: sectionToProto(section)}, nil
 }
 
-func (s *DocumentService) AddSection(ctx context.Context, req *pb.AddSectionRequest) (*pb.SectionResponse, error) {
-	ownerID, err := requireUserID(ctx)
-	if err != nil {
-		return nil, err
+// collectBlockIDs returns every stable block_id present in a ProseMirror doc
+// (FR-EDT-04) — the set comment anchors are matched against.
+func collectBlockIDs(node map[string]any) []string {
+	out := []string{}
+	var walk func(n map[string]any)
+	walk = func(n map[string]any) {
+		if n == nil {
+			return
+		}
+		if attrs, ok := n["attrs"].(map[string]any); ok {
+			if id, ok := attrs["blockId"].(string); ok && id != "" {
+				out = append(out, id)
+			}
+		}
+		content, ok := n["content"].([]any)
+		if !ok {
+			return
+		}
+		for _, child := range content {
+			if childMap, ok := child.(map[string]any); ok {
+				walk(childMap)
+			}
+		}
 	}
-	if _, err := s.Repos.Document.GetOwned(ctx, req.GetDocumentId(), ownerID); err != nil {
+	walk(node)
+	return out
+}
+
+func (s *DocumentService) AddSection(ctx context.Context, req *pb.AddSectionRequest) (*pb.SectionResponse, error) {
+	if _, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_EDITOR); err != nil {
 		return nil, err
 	}
 
@@ -253,11 +275,7 @@ func (s *DocumentService) AddSection(ctx context.Context, req *pb.AddSectionRequ
 }
 
 func (s *DocumentService) RemoveSection(ctx context.Context, req *pb.RemoveSectionRequest) (*pb.RemoveSectionResponse, error) {
-	ownerID, err := requireUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.Repos.Document.GetOwned(ctx, req.GetDocumentId(), ownerID); err != nil {
+	if _, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_EDITOR); err != nil {
 		return nil, err
 	}
 	if err := s.Repos.Section.Remove(ctx, req.GetDocumentId(), req.GetSectionId()); err != nil {
@@ -267,11 +285,7 @@ func (s *DocumentService) RemoveSection(ctx context.Context, req *pb.RemoveSecti
 }
 
 func (s *DocumentService) ReorderSections(ctx context.Context, req *pb.ReorderSectionsRequest) (*pb.ReorderSectionsResponse, error) {
-	ownerID, err := requireUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.Repos.Document.GetOwned(ctx, req.GetDocumentId(), ownerID); err != nil {
+	if _, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_EDITOR); err != nil {
 		return nil, err
 	}
 	sections, err := s.Repos.Section.Reorder(ctx, req.GetDocumentId(), req.GetSectionIds())
@@ -286,10 +300,11 @@ func (s *DocumentService) ReorderSections(ctx context.Context, req *pb.ReorderSe
 }
 
 func (s *DocumentService) DeleteDocument(ctx context.Context, req *pb.DeleteDocumentRequest) (*pb.DeleteDocumentResponse, error) {
-	ownerID, err := requireUserID(ctx)
+	doc, _, err := s.requireAccess(ctx, req.GetId(), pb.Role_ROLE_OWNER)
 	if err != nil {
 		return nil, err
 	}
+	ownerID := doc.OwnerID
 	// Ownership is proven by the document delete itself; the cascade runs
 	// after it so a non-owner never reaches the child deletes (FR-DAT-01).
 	if err := s.Repos.Document.Delete(ctx, req.GetId(), ownerID); err != nil {
@@ -391,9 +406,51 @@ func (s *DocumentService) cascadeDelete(ctx context.Context, documentID string) 
 		{"sources", s.Repos.Source.DeleteByDocument},
 		{"snapshots", s.Repos.Snapshot.DeleteByDocument},
 		{"export jobs", s.Repos.ExportJob.DeleteByDocument},
+		{"shares", s.Repos.Share.DeleteByDocument},
+		{"comments", s.Repos.Comment.DeleteByDocument},
+		{"suggestions", s.Repos.Suggestion.DeleteByDocument},
+		{"read cursors", s.Repos.ReadCursor.DeleteByDocument},
 	} {
 		if err := del.fn(ctx, documentID); err != nil {
 			slog.WarnContext(ctx, "cascade delete failed", "what", del.what, "document_id", documentID, "error", err)
 		}
 	}
+}
+
+// listSharedDocuments backs `filter=shared` (FR-API-07): documents someone
+// else owns that a live share grants this user access to.
+func (s *DocumentService) listSharedDocuments(ctx context.Context, userID string) (*pb.ListDocumentsResponse, error) {
+	shares, err := s.Repos.Share.ListForUser(ctx, userID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list shares: %v", err)
+	}
+
+	docs := make([]*pb.Document, 0, len(shares))
+	seen := map[string]bool{}
+	for i := range shares {
+		share := &shares[i]
+		if seen[share.DocumentID] {
+			continue
+		}
+		seen[share.DocumentID] = true
+
+		doc, err := s.Repos.Document.GetByID(ctx, share.DocumentID)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to load shared document: %v", err)
+		}
+		// A share can outlive its document (deletes cascade shares, but a
+		// concurrent delete can race a list) — skip rather than fail.
+		if doc == nil {
+			continue
+		}
+		docs = append(docs, documentToProto(doc, roleFromString(share.Role)))
+	}
+
+	return &pb.ListDocumentsResponse{Documents: docs, TotalCount: int32(len(docs))}, nil
+}
+
+// isStaleRevision reports whether a repository error is the optimistic
+// concurrency conflict (FR-DAT-02).
+func isStaleRevision(err error) bool {
+	return errors.Is(err, repository.ErrStaleRevision)
 }

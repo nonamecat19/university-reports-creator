@@ -321,5 +321,36 @@
   },
   "ai": {
     "tab": "AI"
+  },
+  "review": {
+    "tab": "Review",
+    "title": "Review",
+    "add_comment": "Add comment",
+    "share": "Share",
+    "share_dialog": "Document access",
+    "invite": "Invite",
+    "create_link": "Create link",
+    "link_once": "Copy the link now — it will not be shown again.",
+    "email_placeholder": "reviewer email",
+    "link_share": "Link",
+    "revoke": "Revoke",
+    "revoked": "Revoked",
+    "no_shares": "Nobody has access yet",
+    "suggest_mode": "Suggest mode",
+    "suggest_mode_forced": "Your edits are saved as suggestions.",
+    "suggestions": "Suggestions",
+    "accept": "Accept",
+    "reject": "Reject",
+    "accept_all": "Accept all",
+    "reject_all": "Reject all",
+    "no_comments": "No comments",
+    "reply_placeholder": "Reply…",
+    "resolve": "Resolve",
+    "reopen": "Reopen",
+    "orphaned": "Lost anchor",
+    "ai_author": "AI analysis",
+    "select_text_first": "Select text in a section first",
+    "comment_prompt": "Comment text",
+    "accepting": "Granting access…"
   }
 }

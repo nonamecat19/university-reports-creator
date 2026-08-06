@@ -45,6 +45,31 @@ service DocumentService {
   rpc CreateSnapshot(CreateSnapshotRequest) returns (SnapshotResponse);
   rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
   rpc RestoreSnapshot(RestoreSnapshotRequest) returns (DocumentResponse);
+
+  // Sharing (FR-API-10, FR-REV-01..04).
+  rpc ShareByEmail(ShareByEmailRequest) returns (ShareResponse);
+  rpc CreateShareLink(CreateShareLinkRequest) returns (ShareResponse);
+  rpc RevokeShare(RevokeShareRequest) returns (RevokeShareResponse);
+  rpc ListShares(ListSharesRequest) returns (ListSharesResponse);
+  rpc AcceptShareLink(AcceptShareLinkRequest) returns (AcceptShareLinkResponse);
+
+  // Comments (FR-REV-05..08).
+  rpc CreateComment(CreateCommentRequest) returns (CommentResponse);
+  rpc ReplyComment(ReplyCommentRequest) returns (CommentResponse);
+  rpc ResolveComment(ResolveCommentRequest) returns (CommentResponse);
+  rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse);
+  rpc ListComments(ListCommentsRequest) returns (ListCommentsResponse);
+
+  // Suggestions ride inside section content as marks; these RPCs maintain the
+  // per-document registry used for listing and accept/reject (FR-REV-09..11).
+  rpc ListSuggestions(ListSuggestionsRequest) returns (ListSuggestionsResponse);
+  rpc RegisterSuggestions(RegisterSuggestionsRequest) returns (RegisterSuggestionsResponse);
+  rpc ResolveSuggestion(ResolveSuggestionRequest) returns (ResolveSuggestionResponse);
+  rpc BulkResolveSuggestions(BulkResolveSuggestionsRequest) returns (BulkResolveSuggestionsResponse);
+
+  // Read cursors / badge counts (FR-REV-14).
+  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
+  rpc GetUnreadCounts(GetUnreadCountsRequest) returns (UnreadCounts);
 }
 
 enum Role {
@@ -374,4 +399,222 @@ message ListSnapshotsResponse {
 message RestoreSnapshotRequest {
   string document_id = 1;
   string snapshot_id = 2;
+}
+
+// ── Review mode: shares, comments, suggestions (FR-API-10, 07) ───────
+
+message Share {
+  string id = 1;
+  string document_id = 2;
+  // email | link
+  string kind = 3;
+  Role role = 4;
+  // Bound on accept; empty for a link share nobody has opened yet.
+  string user_id = 5;
+  string email = 6;
+  // Raw token, returned only in the CreateShareLink response — the record
+  // keeps a hash (FR-DAT-03).
+  string link_token = 7;
+  bool revoked = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message ShareByEmailRequest {
+  string document_id = 1;
+  string email = 2;
+  Role role = 3;
+}
+
+message CreateShareLinkRequest {
+  string document_id = 1;
+  Role role = 2;
+}
+
+message ShareResponse {
+  Share share = 1;
+}
+
+message RevokeShareRequest {
+  string document_id = 1;
+  string share_id = 2;
+}
+
+message RevokeShareResponse {}
+
+message ListSharesRequest {
+  string document_id = 1;
+}
+
+message ListSharesResponse {
+  repeated Share shares = 1;
+}
+
+message AcceptShareLinkRequest {
+  string token = 1;
+}
+
+message AcceptShareLinkResponse {
+  string document_id = 1;
+  Role role = 2;
+}
+
+message CommentAnchor {
+  // Stable block UUID from the ProseMirror schema (FR-EDT-04/FR-REV-05).
+  string block_id = 1;
+  int32 offset_from = 2;
+  int32 offset_to = 3;
+  // Anchored text, used to repair offsets after offline edits (FR-REV-06).
+  string text_snapshot = 4;
+}
+
+message Comment {
+  string id = 1;
+  string document_id = 2;
+  string section_id = 3;
+  // Empty for a thread root; set to the root's id for replies.
+  string thread_root_id = 4;
+  // User id, or the literal "ai" for analysis findings (FR-AI-09).
+  string author = 5;
+  string ai_category = 6;
+  CommentAnchor anchor = 7;
+  // The anchored block no longer exists; the comment lists at section level
+  // rather than being dropped (FR-REV-06).
+  bool orphaned = 8;
+  string body = 9;
+  string resolved_by = 10;
+  google.protobuf.Timestamp resolved_at = 11;
+  google.protobuf.Timestamp created_at = 12;
+}
+
+message CreateCommentRequest {
+  string document_id = 1;
+  string section_id = 2;
+  CommentAnchor anchor = 3;
+  string body = 4;
+  // Set by AI analysis runs (FR-AI-09); ignored for user comments.
+  string ai_category = 5;
+}
+
+message ReplyCommentRequest {
+  string document_id = 1;
+  string thread_root_id = 2;
+  string body = 3;
+}
+
+message ResolveCommentRequest {
+  string document_id = 1;
+  string comment_id = 2;
+  // false reopens a resolved thread (FR-REV-07).
+  bool resolved = 3;
+}
+
+message DeleteCommentRequest {
+  string document_id = 1;
+  string comment_id = 2;
+}
+
+message DeleteCommentResponse {}
+
+enum CommentFilter {
+  COMMENT_FILTER_UNSPECIFIED = 0;
+  COMMENT_FILTER_ALL = 1;
+  COMMENT_FILTER_OPEN = 2;
+  COMMENT_FILTER_RESOLVED = 3;
+  COMMENT_FILTER_MINE = 4;
+  COMMENT_FILTER_AI = 5;
+}
+
+message ListCommentsRequest {
+  string document_id = 1;
+  CommentFilter filter = 2;
+}
+
+message ListCommentsResponse {
+  repeated Comment comments = 1;
+}
+
+message CommentResponse {
+  Comment comment = 1;
+}
+
+message Suggestion {
+  string id = 1;
+  string document_id = 2;
+  string section_id = 3;
+  // Matches the suggestion id carried by the marks in section content.
+  string suggestion_id = 4;
+  string author_id = 5;
+  // insert | delete | format
+  string kind = 6;
+  // pending | accepted | rejected
+  string status = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp resolved_at = 9;
+}
+
+message ListSuggestionsRequest {
+  string document_id = 1;
+}
+
+message ListSuggestionsResponse {
+  repeated Suggestion suggestions = 1;
+}
+
+message RegisterSuggestionsRequest {
+  string document_id = 1;
+  string section_id = 2;
+  // Suggestion ids present in the section's content after a suggest-mode
+  // write; the registry is reconciled against them (FR-REV-11).
+  repeated string suggestion_ids = 3;
+  string kind = 4;
+}
+
+message RegisterSuggestionsResponse {
+  repeated Suggestion suggestions = 1;
+}
+
+message ResolveSuggestionRequest {
+  string document_id = 1;
+  string suggestion_id = 2;
+  // true accepts (apply + strip marks), false rejects (revert).
+  bool accept = 3;
+  // Content of the affected section after the client applied the resolution,
+  // with its revision (FR-EDT-09).
+  string content_json = 4;
+  string section_id = 5;
+  int32 section_revision = 6;
+}
+
+message ResolveSuggestionResponse {
+  Suggestion suggestion = 1;
+  Section section = 2;
+}
+
+message BulkResolveSuggestionsRequest {
+  string document_id = 1;
+  string section_id = 2;
+  bool accept = 3;
+  string content_json = 4;
+  int32 section_revision = 5;
+}
+
+message BulkResolveSuggestionsResponse {
+  repeated Suggestion suggestions = 1;
+  Section section = 2;
+}
+
+message MarkReadRequest {
+  string document_id = 1;
+}
+
+message MarkReadResponse {}
+
+message UnreadCounts {
+  string document_id = 1;
+  int32 comments = 2;
+  int32 suggestions = 3;
+}
+
+message GetUnreadCountsRequest {
+  string document_id = 1;
 }

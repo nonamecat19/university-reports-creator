@@ -26,11 +26,19 @@ import {
   SectionKind,
 } from '../../../core/services/document.service';
 import { FileService } from '../../../core/services/file.service';
+import { ReviewService, Role } from '../../../core/services/review.service';
 import { SourceService } from '../../../core/services/source.service';
 import { AiTabComponent } from '../../ai/ai-tab.component';
+import { ReviewPanelComponent, type SuggestionResolution } from '../review/review-panel.component';
+import { ShareDialogComponent } from '../review/share-dialog.component';
 import { SourcesPanelComponent } from '../sources/sources-panel.component';
 import { hydrateImages, parseSectionContent } from './document-content.util';
 import { captionText, computeNumbering, type PMNode } from './numbering';
+import {
+  collectSuggestionIds,
+  resolveAllSuggestionsInDoc,
+  resolveSuggestionInDoc,
+} from './schema/suggest-mode.extension';
 import { SectionEditorComponent } from './section-editor.component';
 import { countWords, estimatePages } from './word-count';
 
@@ -66,6 +74,8 @@ const METADATA_DEBOUNCE_MS = 2000;
     CdkDrag,
     AiTabComponent,
     SourcesPanelComponent,
+    ReviewPanelComponent,
+    ShareDialogComponent,
     SectionEditorComponent,
   ],
   template: `
@@ -168,6 +178,9 @@ const METADATA_DEBOUNCE_MS = 2000;
                   [initialContent]="sectionContent()[section.id]"
                   [numberingMap]="numbering().blockNumbers"
                   [citationNumbers]="sourceService.citationNumbers()"
+                  [suggestMode]="suggestMode()"
+                  [authorId]="currentUserId()"
+                  [editable]="review.canComment()"
                   (dirty)="onSectionDirty(section.id, $event)"
                   (save)="onSectionSave(section.id, $event)"
                   (focused)="activeSectionId.set(section.id)"
@@ -191,6 +204,17 @@ const METADATA_DEBOUNCE_MS = 2000;
             <button
               type="button"
               class="panel-tab"
+              [class.active]="sidePanelTab() === 'review'"
+              (click)="openReviewTab()"
+            >
+              {{ 'review.tab' | translate }}
+              @if (review.unreadComments() + review.unreadSuggestions() > 0) {
+                <span class="badge">{{ review.unreadComments() + review.unreadSuggestions() }}</span>
+              }
+            </button>
+            <button
+              type="button"
+              class="panel-tab"
               [class.active]="sidePanelTab() === 'ai'"
               (click)="sidePanelTab.set('ai')"
             >
@@ -199,12 +223,24 @@ const METADATA_DEBOUNCE_MS = 2000;
           </div>
           @if (sidePanelTab() === 'sources') {
             <app-sources-panel (cite)="insertCitation($event)" />
+          } @else if (sidePanelTab() === 'review') {
+            <app-review-panel
+              [suggestMode]="suggestMode()"
+              (addComment)="commentOnSelection()"
+              (openShare)="shareVisible.set(true)"
+              (toggleSuggestMode)="suggestMode.set(!suggestMode())"
+              (focusComment)="scrollToSection($event.sectionId)"
+              (resolveSuggestion)="applySuggestionResolution($event)"
+              (bulkResolve)="applyBulkResolution($event)"
+            />
           } @else {
             <app-ai-tab />
           }
         </aside>
       </div>
     }
+
+    <app-share-dialog [documentId]="id" [(visible)]="shareVisible" />
 
     <p-dialog [header]="'editor.add_section_dialog' | translate" [(visible)]="addSectionVisible" [modal]="true" [style]="{ width: '28rem' }">
       <div class="field">
@@ -305,6 +341,18 @@ const METADATA_DEBOUNCE_MS = 2000;
       font-size: 0.8rem;
       border-bottom: 2px solid transparent;
       color: inherit;
+    }
+    .badge {
+      display: inline-block;
+      margin-left: 0.25rem;
+      min-width: 1.1rem;
+      padding: 0 0.25rem;
+      border-radius: 999px;
+      background: var(--p-red-500, #ef4444);
+      color: #fff;
+      font-size: 0.65rem;
+      line-height: 1.1rem;
+      text-align: center;
     }
     .panel-tab.active {
       border-bottom-color: var(--p-primary-500, #3b82f6);
@@ -452,6 +500,7 @@ export class DocumentEditorComponent implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly fileService = inject(FileService);
   protected readonly sourceService = inject(SourceService);
+  protected readonly review = inject(ReviewService);
   private readonly translate = inject(TranslateService);
 
   readonly loading = signal(true);
@@ -466,7 +515,13 @@ export class DocumentEditorComponent implements OnInit {
   readonly exportVisible = signal(false);
   readonly exporting = signal(false);
   readonly exportJob = signal<ExportJobStatus | null>(null);
-  readonly sidePanelTab = signal<'sources' | 'ai'>('sources');
+  readonly sidePanelTab = signal<'sources' | 'review' | 'ai'>('sources');
+  readonly shareVisible = signal(false);
+  /** Commenters are forced into suggest mode; owners/editors toggle it
+   * (FR-REV-09). */
+  readonly suggestMode = signal(false);
+  readonly currentUserId = signal('');
+  readonly commentError = signal('');
   /** Which section a panel action (cite, AI insert) applies to — the last one
    * that had focus. */
   readonly activeSectionId = signal('');
@@ -514,6 +569,10 @@ export class DocumentEditorComponent implements OnInit {
       this.recomputeNumbering();
       this.activeSectionId.set(ordered[0]?.id ?? '');
       await this.sourceService.load(this.id);
+
+      this.currentUserId.set(this.authService.user()?.id ?? '');
+      await this.review.load(this.id, document.myRole);
+      if (this.review.forcedSuggestMode()) this.suggestMode.set(true);
       await this.prefillMetadataFromProfile(document);
     } finally {
       this.loading.set(false);
@@ -590,6 +649,94 @@ export class DocumentEditorComponent implements OnInit {
     this.recomputeNumbering();
   }
 
+  /** Opening the review tab clears the badge counts (FR-REV-14). */
+  openReviewTab(): void {
+    this.sidePanelTab.set('review');
+    void this.review.markRead();
+  }
+
+  scrollToSection(sectionId: string): void {
+    this.scrollTo(sectionId);
+  }
+
+  /** Anchors a new comment on the current selection in the focused section
+   * (FR-REV-05). */
+  async commentOnSelection(): Promise<void> {
+    const target = this.activeSectionEditor();
+    const anchor = target?.selectionAnchor();
+    if (!anchor) {
+      this.commentError.set(this.translate.instant('review.select_text_first'));
+      return;
+    }
+    const body = window.prompt(this.translate.instant('review.comment_prompt'));
+    if (!body?.trim()) return;
+
+    this.commentError.set('');
+    await this.review.createComment(this.activeSectionId(), anchor, body.trim());
+  }
+
+  /** Applies an accept/reject to the section content, then persists both the
+   * content and the registry row in one RPC (FR-REV-10). */
+  async applySuggestionResolution(resolution: SuggestionResolution): Promise<void> {
+    const section = this.sections().find((s) => s.id === resolution.sectionId);
+    if (!section) return;
+
+    const current =
+      this.liveSectionContent.get(section.id) ?? parseSectionContent(section.contentJson);
+    const updated = resolveSuggestionInDoc(current, resolution.suggestionId, resolution.accept);
+
+    const { sectionRevision } = await this.review.resolveSuggestion(
+      resolution.suggestionId,
+      resolution.accept,
+      section.id,
+      JSON.stringify(updated),
+      section.revision
+    );
+    await this.applyResolvedContent(section.id, updated as PMNode, sectionRevision);
+  }
+
+  /** Bulk accept/reject across the focused section (FR-REV-10). The server
+   * snapshots first, so this stays undoable. */
+  async applyBulkResolution(accept: boolean): Promise<void> {
+    const section = this.sections().find((s) => s.id === this.activeSectionId());
+    if (!section) return;
+
+    const current =
+      this.liveSectionContent.get(section.id) ?? parseSectionContent(section.contentJson);
+    const updated = resolveAllSuggestionsInDoc(current, accept);
+
+    const revision = await this.review.bulkResolveSuggestions(
+      accept,
+      section.id,
+      JSON.stringify(updated),
+      section.revision
+    );
+    await this.applyResolvedContent(section.id, updated as PMNode, revision);
+  }
+
+  private async applyResolvedContent(
+    sectionId: string,
+    content: PMNode,
+    revision: number
+  ): Promise<void> {
+    this.liveSectionContent.set(sectionId, content);
+    this.sections.set(
+      this.sections().map((s) =>
+        s.id === sectionId ? { ...s, revision, contentJson: JSON.stringify(content) } : s
+      )
+    );
+    const editors = this.sectionEditors?.toArray() ?? [];
+    const index = this.sections().findIndex((s) => s.id === sectionId);
+    editors[index]?.setContent(await hydrateImages(content, this.fileService));
+    this.recomputeNumbering();
+  }
+
+  private activeSectionEditor(): SectionEditorComponent | undefined {
+    const editors = this.sectionEditors?.toArray() ?? [];
+    const index = this.sections().findIndex((s) => s.id === this.activeSectionId());
+    return editors[index >= 0 ? index : 0];
+  }
+
   /** Toolbar "cite" button: the picker lives in the sources panel, so opening
    * that tab *is* the picker (FR-BIB-05 — type-to-search then Enter). */
   focusSourcesPanel(sectionId: string): void {
@@ -623,6 +770,17 @@ export class DocumentEditorComponent implements OnInit {
       );
       this.sections.set(this.sections().map((s) => (s.id === sectionId ? updated : s)));
       this.sectionStatuses.set(sectionId, 'saved');
+
+      // FR-REV-11: content is the source of truth for suggestions; the
+      // registry is reconciled from the ids the saved content actually holds.
+      const suggestionIds = collectSuggestionIds(json);
+      if (suggestionIds.length > 0) {
+        await this.review.registerSuggestions(
+          sectionId,
+          suggestionIds.map((s) => s.id),
+          suggestionIds[0].kind
+        );
+      }
     } catch (error) {
       this.sectionStatuses.set(sectionId, 'error');
       if (error instanceof RpcError && error.code === 'FAILED_PRECONDITION') {

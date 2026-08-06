@@ -11,7 +11,7 @@ import grpc
 
 from .bibliography import render_entries
 from .config import RenderConfig
-from .docx_export import RenderSectionInput, render_docx
+from .docx_export import RenderComment, RenderSectionInput, render_docx
 from .pdf_convert import PdfConversionError, convert_docx_to_pdf
 from .resolvers import resolve as resolve_source
 from .template_parser import TemplateParseError, parse_template
@@ -69,6 +69,23 @@ class RenderServicer:
             for s in request.sections
         ]
 
+        # Comments only reach the file when the caller asked for them
+        # (FR-EXP-04 include_comments), even if it sent the list anyway.
+        comments = (
+            [
+                RenderComment(
+                    section_id=c.section_id,
+                    block_id=c.block_id,
+                    body=c.body,
+                    author_id=c.author_id,
+                    timestamp=c.timestamp,
+                )
+                for c in request.comments
+            ]
+            if request.options.include_comments
+            else []
+        )
+
         try:
             docx_bytes, warnings = render_docx(
                 template_docx=bytes(request.template_docx),
@@ -77,6 +94,9 @@ class RenderServicer:
                 sources_csl_json=list(request.sources_csl_json),
                 images={k: bytes(v) for k, v in request.images.items()},
                 numbering_mode=request.options.numbering_mode or "by_order",
+                suggestions_strategy=request.options.suggestions_strategy or "clean",
+                comments=comments,
+                authors=dict(request.authors),
             )
         except Exception as exc:  # noqa: BLE001 - surfaced to the caller as INTERNAL
             logger.exception("RenderDocx failed")

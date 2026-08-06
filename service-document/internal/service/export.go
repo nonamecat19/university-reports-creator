@@ -137,7 +137,24 @@ func (s *DocumentService) runExportPipeline(
 		return nil, status.Errorf(codes.Internal, "failed to create export job: %v", err)
 	}
 
-	artifacts, warnings, pipelineErr := s.doExport(ctx, doc, template, version, sections, sourcesCSL, format, suggestionsStrategy, tableContinuation)
+	// FR-EXP-04: track changes is the default whenever suggestions are still
+	// pending, so a reviewer's work is never silently dropped from the file.
+	if suggestionsStrategy == "" {
+		suggestionsStrategy = "clean"
+		if pending, perr := s.pendingSuggestionCount(ctx, doc.ID); perr == nil && pending > 0 {
+			suggestionsStrategy = "with_track_changes"
+		}
+	}
+
+	var comments []*renderpb.RenderCommentAnchor
+	if includeComments {
+		comments, err = s.exportComments(ctx, doc.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	artifacts, warnings, pipelineErr := s.doExport(ctx, doc, template, version, sections, sourcesCSL, comments, format, suggestionsStrategy, tableContinuation, includeComments)
 	if pipelineErr != nil {
 		if failed, ferr := s.Repos.ExportJob.Fail(ctx, job.ID, pipelineErr.Error()); ferr == nil {
 			job = failed
@@ -159,7 +176,9 @@ func (s *DocumentService) doExport(
 	version *repository.TemplateVersion,
 	sections []repository.Section,
 	sourcesCSL []string,
+	comments []*renderpb.RenderCommentAnchor,
 	format, suggestionsStrategy, tableContinuation string,
+	includeComments bool,
 ) ([]repository.ExportArtifact, []string, error) {
 	templateFile, err := s.Clients.Files.Download(ctx, &filepb.DownloadRequest{Id: version.FileKey})
 	if err != nil {
@@ -204,12 +223,13 @@ func (s *DocumentService) doExport(
 		// Sources arrive already ordered per the document's numbering mode
 		// (FR-BIB-06) — see bibliographyInput.
 		SourcesCslJson: sourcesCSL,
+		Comments:       comments,
 		Options: &renderpb.RenderOptions{
 			NumberingMode:       doc.Settings.NumberingMode,
 			TableContinuation:   tableContinuation,
 			IncludeUncited:      doc.Settings.IncludeUncited,
 			SuggestionsStrategy: suggestionsStrategy,
-			IncludeComments:     false,
+			IncludeComments:     includeComments,
 		},
 		Images: images,
 	})
@@ -360,4 +380,47 @@ func exportJobToProto(job *repository.ExportJob) *pb.ExportJobStatus {
 		status.FinishedAt = timestamppb.New(*job.FinishedAt)
 	}
 	return status
+}
+
+// pendingSuggestionCount backs the FR-EXP-04 default: an export of a document
+// with unresolved suggestions defaults to track changes rather than silently
+// dropping the reviewer's proposals.
+func (s *DocumentService) pendingSuggestionCount(ctx context.Context, documentID string) (int, error) {
+	suggestions, err := s.Repos.Suggestion.ListByDocument(ctx, documentID)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for i := range suggestions {
+		if suggestions[i].Status == "pending" {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// exportComments collects unresolved, still-anchored comments for the
+// "with comments" export (FR-REV-13). Resolved threads and orphans are left
+// out: the file should show what the supervisor still expects action on.
+func (s *DocumentService) exportComments(ctx context.Context, documentID string) ([]*renderpb.RenderCommentAnchor, error) {
+	comments, err := s.Repos.Comment.ListByDocument(ctx, documentID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list comments: %v", err)
+	}
+
+	out := make([]*renderpb.RenderCommentAnchor, 0, len(comments))
+	for i := range comments {
+		c := &comments[i]
+		if c.ResolvedAt != nil || c.Orphaned || c.Anchor.BlockID == "" {
+			continue
+		}
+		out = append(out, &renderpb.RenderCommentAnchor{
+			SectionId: c.SectionID,
+			BlockId:   c.Anchor.BlockID,
+			Body:      c.Body,
+			AuthorId:  c.Author,
+			Timestamp: c.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	return out, nil
 }

@@ -29,6 +29,7 @@ from .docx_xml import (
     set_update_fields_on_open,
 )
 from .placeholders import find_placeholders
+from .revisions import CommentsBuilder, RevisionIds, should_emit_text, suggestion_mark, wrap_revision
 
 PX_TO_EMU = 9525
 
@@ -41,6 +42,33 @@ class RenderSectionInput:
     kind: str  # "chapter" | "appendix"
     order: int
     content: dict[str, Any] | None
+
+
+@dataclass
+class RenderComment:
+    """One comment to export as a native Word comment (FR-REV-13)."""
+
+    section_id: str
+    block_id: str
+    body: str
+    author_id: str
+    timestamp: str = ""
+
+
+@dataclass
+class RevisionContext:
+    """Everything the translator needs to emit tracked changes and comments.
+
+    Threaded through translation rather than held globally so `render_docx`
+    stays a pure function of its inputs (export determinism, FR-EXP).
+    """
+
+    strategy: str
+    ids: RevisionIds
+    comments: CommentsBuilder | None
+    # block_id -> comments anchored on it, consumed as blocks are emitted.
+    comments_by_block: dict[str, list[RenderComment]]
+    authors: dict[str, str]
 
 
 def _substitute_scalar_fields(paragraph: Paragraph, values: dict[str, str]) -> None:
@@ -97,12 +125,19 @@ def _find_section_regions(paragraphs: list[Paragraph]) -> dict[str, tuple[int, i
     return regions
 
 
-def _inline_text_runs(paragraph: Paragraph, inline_nodes: list[dict]) -> None:
+def _inline_text_runs(paragraph: Paragraph, inline_nodes: list[dict], revisions: RevisionContext) -> None:
     for node in inline_nodes or []:
         if node.get("type") != "text":
             continue
+        marks = node.get("marks") or []
+        suggestion = suggestion_mark(marks)
+        if not should_emit_text(suggestion, revisions.strategy):
+            continue
+
         run = paragraph.add_run(node.get("text", ""))
-        set_run_marks(run, node.get("marks") or [])
+        set_run_marks(run, marks)
+        if suggestion is not None and revisions.strategy == "with_track_changes":
+            wrap_revision(run, suggestion, revisions.ids, revisions.authors)
 
 
 def _translate_node(
@@ -111,6 +146,7 @@ def _translate_node(
     images: dict[str, bytes],
     numbering_result: num.NumberingResult,
     anchor: Any,
+    revisions: RevisionContext,
 ) -> Any:
     node_type = node.get("type")
     block_id = (node.get("attrs") or {}).get("blockId")
@@ -118,7 +154,8 @@ def _translate_node(
 
     if node_type == "paragraph":
         para = new_paragraph_after(anchor, document)
-        _inline_text_runs(para, node.get("content"))
+        _inline_text_runs(para, node.get("content"), revisions)
+        _attach_block_comments(para, block_id, revisions)
         return para._p
 
     if node_type == "heading":
@@ -130,7 +167,8 @@ def _translate_node(
             pass
         if number:
             para.add_run(f"{number} ").bold = True
-        _inline_text_runs(para, node.get("content"))
+        _inline_text_runs(para, node.get("content"), revisions)
+        _attach_block_comments(para, block_id, revisions)
         return para._p
 
     if node_type in ("bulletList", "orderedList"):
@@ -143,7 +181,7 @@ def _translate_node(
                     para.style = document.styles[style_name]
                 except KeyError:
                     pass
-                _inline_text_runs(para, child.get("content"))
+                _inline_text_runs(para, child.get("content"), revisions)
                 current = para._p
         return current
 
@@ -178,7 +216,7 @@ def _translate_node(
                 cell_para = docx_cell.paragraphs[0]
                 for block in cell.get("content") or []:
                     if block.get("type") == "paragraph":
-                        _inline_text_runs(cell_para, block.get("content"))
+                        _inline_text_runs(cell_para, block.get("content"), revisions)
 
         for i in range(header_row_count):
             mark_header_row(table, i)
@@ -221,18 +259,27 @@ def _translate_node(
     return anchor
 
 
+def _attach_block_comments(paragraph: Paragraph, block_id: str | None, revisions: RevisionContext) -> None:
+    """Anchors every comment on this block, once (FR-REV-13)."""
+    if not block_id or revisions.comments is None:
+        return
+    for comment in revisions.comments_by_block.pop(block_id, []):
+        revisions.comments.add(paragraph, comment.body, comment.author_id, comment.timestamp)
+
+
 def _translate_section_content(
     content: dict[str, Any] | None,
     document: Any,
     images: dict[str, bytes],
     numbering_result: num.NumberingResult,
     anchor: Any,
+    revisions: RevisionContext,
 ) -> Any:
     if not content:
         return anchor
     current = anchor
     for node in content.get("content") or []:
-        current = _translate_node(node, document, images, numbering_result, current)
+        current = _translate_node(node, document, images, numbering_result, current, revisions)
     return current
 
 
@@ -243,9 +290,24 @@ def render_docx(
     sources_csl_json: list[str],
     images: dict[str, bytes],
     numbering_mode: str,
+    suggestions_strategy: str = "clean",
+    comments: list[RenderComment] | None = None,
+    authors: dict[str, str] | None = None,
 ) -> tuple[bytes, list[dict]]:
     warnings: list[dict] = []
     document = docx.Document(io.BytesIO(template_docx))
+
+    ids = RevisionIds()
+    comments_by_block: dict[str, list[RenderComment]] = {}
+    for comment in comments or []:
+        comments_by_block.setdefault(comment.block_id, []).append(comment)
+    revisions = RevisionContext(
+        strategy=suggestions_strategy or "clean",
+        ids=ids,
+        comments=CommentsBuilder(ids, authors or {}) if comments_by_block else None,
+        comments_by_block=comments_by_block,
+        authors=authors or {},
+    )
 
     body_paragraphs = list(document.paragraphs)
     for paragraph in body_paragraphs:
@@ -273,7 +335,7 @@ def render_docx(
             )
             continue
         anchor = region_paragraphs[0]._p
-        _translate_section_content(matching.content, document, images, numbering_result, anchor)
+        _translate_section_content(matching.content, document, images, numbering_result, anchor, revisions)
         remove_paragraphs(region_paragraphs)
 
     if extra_sections:
@@ -287,7 +349,7 @@ def render_docx(
             label = numbering_result.section_labels.get(section.id, "")
             heading_para.add_run(f"{num.section_label(section.kind, label)}. {section.title}").bold = True
             tail_anchor = heading_para._p
-            tail_anchor = _translate_section_content(section.content, document, images, numbering_result, tail_anchor)
+            tail_anchor = _translate_section_content(section.content, document, images, numbering_result, tail_anchor, revisions)
 
     bib_marker = _find_marker(list(document.paragraphs), "bibliography")
     if bib_marker is not None:
@@ -304,6 +366,17 @@ def render_docx(
         for run in list(toc_marker.runs):
             run.text = ""
         insert_toc_field(toc_marker)
+
+    if revisions.comments is not None:
+        revisions.comments.attach(document)
+    # A comment whose anchor block is gone (deleted since it was written) has
+    # nowhere to land in the file; it stays visible in-app as an orphan.
+    for block_id, orphaned in revisions.comments_by_block.items():
+        warnings.append({
+            "severity": "warning",
+            "message": f"{len(orphaned)} comment(s) anchored on a missing block were not exported",
+            "location": block_id,
+        })
 
     set_update_fields_on_open(document)
 

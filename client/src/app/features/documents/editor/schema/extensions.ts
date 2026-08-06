@@ -12,6 +12,7 @@ import { Citation } from './citation.extension';
 import { FigureImage } from './figure-image.extension';
 import { Numbering } from './numbering.extension';
 import { SuggestionDelete, SuggestionInsert } from './reserved-suggestion-marks.extension';
+import { SuggestMode } from './suggest-mode.extension';
 
 /**
  * Section editor schema (FR-EDT-04): blocks + marks representable in docx.
@@ -41,5 +42,6 @@ export function buildSectionExtensions(): AnyExtension[] {
     Numbering,
     SuggestionInsert,
     SuggestionDelete,
+    SuggestMode,
   ];
 }

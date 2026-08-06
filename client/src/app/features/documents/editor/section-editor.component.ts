@@ -15,6 +15,11 @@ import { FileService } from '../../../core/services/file.service';
 import { citationNumbersPluginKey } from './schema/citation.extension';
 import { buildSectionExtensions } from './schema/extensions';
 import { numberingPluginKey } from './schema/numbering.extension';
+import {
+  drainPendingSuggestions,
+  type SuggestModeState,
+  suggestModePluginKey,
+} from './schema/suggest-mode.extension';
 
 const AUTOSAVE_DEBOUNCE_MS = 2000;
 
@@ -114,6 +119,18 @@ const AUTOSAVE_DEBOUNCE_MS = 2000;
       font-size: 14pt;
       line-height: 1.5;
     }
+    .editor-surface :global(.suggestion-insert) {
+      color: var(--p-green-700, #15803d);
+      text-decoration: underline;
+    }
+    .editor-surface :global(.suggestion-delete) {
+      color: var(--p-red-600, #dc2626);
+      text-decoration: line-through;
+    }
+    .editor-surface :global(.comment-anchor) {
+      background: var(--p-yellow-100, #fef9c3);
+      border-bottom: 1px dashed var(--p-yellow-500, #eab308);
+    }
     .editor-surface :global(.citation-label) {
       color: var(--p-primary-700, #1d4ed8);
       cursor: default;
@@ -153,6 +170,10 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
   @Input() numberingMap: Map<string, string> = new Map();
   /** sourceId -> reference-list number, for citation decorations (FR-BIB-05). */
   @Input() citationNumbers: Map<string, number> = new Map();
+  /** In suggest mode every edit becomes a suggestion (FR-REV-09). */
+  @Input() suggestMode = false;
+  /** Author stamped on suggestion marks. */
+  @Input() authorId = '';
   @Input() editable = true;
 
   /** Emits on every keystroke (current JSON) — cheap, used for live numbering
@@ -185,6 +206,9 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
     if (changes['citationNumbers'] && this.editor) {
       this.pushCitationNumbers();
     }
+    if ((changes['suggestMode'] || changes['authorId']) && this.editor) {
+      this.pushSuggestMode();
+    }
     if (changes['editable'] && this.editor) {
       this.editor.setEditable(this.editable);
     }
@@ -207,6 +231,56 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
     });
     this.pushNumbering();
     this.pushCitationNumbers();
+    this.pushSuggestMode();
+  }
+
+  private pushSuggestMode(): void {
+    if (!this.editor) return;
+    const meta: Partial<SuggestModeState> = { active: this.suggestMode, authorId: this.authorId };
+    this.editor.view.dispatch(this.editor.state.tr.setMeta(suggestModePluginKey, meta));
+  }
+
+  /** Suggestion ids created in this editor since it was mounted, for registry
+   * sync after a save (FR-REV-11). */
+  pendingSuggestions(): { id: string; kind: 'insert' | 'delete' }[] {
+    return this.editor ? drainPendingSuggestions(this.editor.state) : [];
+  }
+
+  /** Anchor for a new comment on the current selection (FR-REV-05): the
+   * enclosing block's stable id, the offsets inside it, and the selected text
+   * so offsets can be repaired later. Returns null when nothing is selected.
+   */
+  selectionAnchor(): {
+    blockId: string;
+    offsetFrom: number;
+    offsetTo: number;
+    textSnapshot: string;
+  } | null {
+    if (!this.editor) return null;
+    const { state } = this.editor;
+    const { from, to, empty } = state.selection;
+    if (empty) return null;
+
+    const resolved = state.doc.resolve(from);
+    let blockId = '';
+    let blockStart = 0;
+    for (let depth = resolved.depth; depth > 0; depth--) {
+      const node = resolved.node(depth);
+      const id = node.attrs?.['blockId'] as string | undefined;
+      if (id) {
+        blockId = id;
+        blockStart = resolved.start(depth);
+        break;
+      }
+    }
+    if (!blockId) return null;
+
+    return {
+      blockId,
+      offsetFrom: from - blockStart,
+      offsetTo: to - blockStart,
+      textSnapshot: state.doc.textBetween(from, to, ' '),
+    };
   }
 
   /** Inserts a citation node at the cursor (FR-BIB-05). The rendered `[N]` is

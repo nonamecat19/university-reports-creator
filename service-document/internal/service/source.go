@@ -18,11 +18,7 @@ import (
 // results always pass through the client's form first — nothing is saved
 // blind (FR-BIB-04).
 func (s *DocumentService) AddSource(ctx context.Context, req *pb.AddSourceRequest) (*pb.SourceResponse, error) {
-	ownerID, err := requireUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.Repos.Document.GetOwned(ctx, req.GetDocumentId(), ownerID); err != nil {
+	if _, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_EDITOR); err != nil {
 		return nil, err
 	}
 
@@ -41,11 +37,7 @@ func (s *DocumentService) AddSource(ctx context.Context, req *pb.AddSourceReques
 }
 
 func (s *DocumentService) UpdateSource(ctx context.Context, req *pb.UpdateSourceRequest) (*pb.SourceResponse, error) {
-	ownerID, err := requireUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.Repos.Document.GetOwned(ctx, req.GetDocumentId(), ownerID); err != nil {
+	if _, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_EDITOR); err != nil {
 		return nil, err
 	}
 
@@ -64,11 +56,7 @@ func (s *DocumentService) UpdateSource(ctx context.Context, req *pb.UpdateSource
 }
 
 func (s *DocumentService) DeleteSource(ctx context.Context, req *pb.DeleteSourceRequest) (*pb.DeleteSourceResponse, error) {
-	ownerID, err := requireUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.Repos.Document.GetOwned(ctx, req.GetDocumentId(), ownerID); err != nil {
+	if _, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_EDITOR); err != nil {
 		return nil, err
 	}
 	// Citations pointing at the deleted source become orphans rather than
@@ -81,11 +69,7 @@ func (s *DocumentService) DeleteSource(ctx context.Context, req *pb.DeleteSource
 }
 
 func (s *DocumentService) ListSources(ctx context.Context, req *pb.ListSourcesRequest) (*pb.ListSourcesResponse, error) {
-	ownerID, err := requireUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.Repos.Document.GetOwned(ctx, req.GetDocumentId(), ownerID); err != nil {
+	if _, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_VIEWER); err != nil {
 		return nil, err
 	}
 
@@ -130,11 +114,7 @@ func (s *DocumentService) ResolveSource(ctx context.Context, req *pb.ResolveSour
 // (FR-BIB-10) through the same RenderService pass the export uses, so preview
 // and exported docx can never disagree.
 func (s *DocumentService) GetBibliography(ctx context.Context, req *pb.GetBibliographyRequest) (*pb.GetBibliographyResponse, error) {
-	ownerID, err := requireUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	doc, err := s.Repos.Document.GetOwned(ctx, req.GetDocumentId(), ownerID)
+	doc, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_VIEWER)
 	if err != nil {
 		return nil, err
 	}

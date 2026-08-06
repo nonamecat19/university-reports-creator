@@ -93,10 +93,26 @@ message RenderDocxRequest {
   // the document has none.
   repeated string sources_csl_json = 5;
   RenderOptions options = 6;
+  // Pending comments to export as native Word comments when
+  // options.include_comments is set (FR-REV-13).
+  repeated RenderCommentAnchor comments = 8;
+  // user_id -> display name, so revisions and comments carry real author
+  // names; service-render has no access to the user store.
+  map<string, string> authors = 9;
   // Resolved image bytes keyed by MinIO object key (FR-EDT-05). service-render
   // is stateless and has no storage credentials, so service-document resolves
   // every image node's object_key to bytes before calling RenderDocx.
   map<string, bytes> images = 7;
+}
+
+message RenderCommentAnchor {
+  string section_id = 1;
+  // Stable block_id the comment is anchored on (FR-REV-05).
+  string block_id = 2;
+  string body = 3;
+  string author_id = 4;
+  // ISO-8601; defaults to export time when empty.
+  string timestamp = 5;
 }
 
 message RenderDocxResponse {

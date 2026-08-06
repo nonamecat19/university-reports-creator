@@ -90,6 +90,50 @@ DEFINE FIELD IF NOT EXISTS trigger ON snapshot TYPE string DEFAULT 'manual';
 DEFINE FIELD IF NOT EXISTS data ON snapshot TYPE object FLEXIBLE DEFAULT {};
 DEFINE FIELD IF NOT EXISTS created_at ON snapshot TYPE datetime;
 DEFINE INDEX IF NOT EXISTS idx_snapshot_document ON snapshot FIELDS document_id;
+
+DEFINE TABLE IF NOT EXISTS share SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS document_id ON share TYPE string;
+DEFINE FIELD IF NOT EXISTS kind ON share TYPE string DEFAULT 'link';
+DEFINE FIELD IF NOT EXISTS role ON share TYPE string DEFAULT 'commenter';
+DEFINE FIELD IF NOT EXISTS user_id ON share TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS email ON share TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS link_token_hash ON share TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS revoked_at ON share TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS created_at ON share TYPE datetime;
+DEFINE INDEX IF NOT EXISTS idx_share_document ON share FIELDS document_id;
+DEFINE INDEX IF NOT EXISTS idx_share_user ON share FIELDS user_id;
+DEFINE INDEX IF NOT EXISTS idx_share_token ON share FIELDS link_token_hash;
+
+DEFINE TABLE IF NOT EXISTS comment SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS document_id ON comment TYPE string;
+DEFINE FIELD IF NOT EXISTS section_id ON comment TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS thread_root_id ON comment TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS author ON comment TYPE string;
+DEFINE FIELD IF NOT EXISTS ai_category ON comment TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS anchor ON comment TYPE object FLEXIBLE DEFAULT {};
+DEFINE FIELD IF NOT EXISTS orphaned ON comment TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS body ON comment TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS resolved_by ON comment TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS resolved_at ON comment TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS created_at ON comment TYPE datetime;
+DEFINE INDEX IF NOT EXISTS idx_comment_document ON comment FIELDS document_id;
+
+DEFINE TABLE IF NOT EXISTS suggestion_registry SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS document_id ON suggestion_registry TYPE string;
+DEFINE FIELD IF NOT EXISTS section_id ON suggestion_registry TYPE string;
+DEFINE FIELD IF NOT EXISTS suggestion_id ON suggestion_registry TYPE string;
+DEFINE FIELD IF NOT EXISTS author_id ON suggestion_registry TYPE string;
+DEFINE FIELD IF NOT EXISTS kind ON suggestion_registry TYPE string DEFAULT 'insert';
+DEFINE FIELD IF NOT EXISTS status ON suggestion_registry TYPE string DEFAULT 'pending';
+DEFINE FIELD IF NOT EXISTS created_at ON suggestion_registry TYPE datetime;
+DEFINE FIELD IF NOT EXISTS resolved_at ON suggestion_registry TYPE option<datetime>;
+DEFINE INDEX IF NOT EXISTS idx_suggestion_document ON suggestion_registry FIELDS document_id;
+
+DEFINE TABLE IF NOT EXISTS read_cursor SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS document_id ON read_cursor TYPE string;
+DEFINE FIELD IF NOT EXISTS user_id ON read_cursor TYPE string;
+DEFINE FIELD IF NOT EXISTS last_seen_at ON read_cursor TYPE datetime;
+DEFINE INDEX IF NOT EXISTS idx_read_cursor_doc_user ON read_cursor FIELDS document_id, user_id;
 `
 
 // ApplySchema applies the DEFINE statements above. Safe to run on every
