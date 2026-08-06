@@ -104,3 +104,53 @@ func CurrentRevision(err error) (int32, bool) {
 	}
 	return 0, false
 }
+
+// ExportViolation is one blocking finding from the pre-export validation gate
+// (FR-EXP-06): a required field left empty, an orphaned citation, a table lint
+// error. Subject identifies what to fix (field name, source id, section id).
+type ExportViolation struct {
+	Type        string
+	Subject     string
+	Description string
+}
+
+// ExportValidationFailed builds a FAILED_PRECONDITION carrying the structured
+// violation list the export checklist dialog renders (FR-EXP-06). The server
+// re-validates what the client already checked, so the details must be
+// machine-readable, not just a message.
+func ExportValidationFailed(msg string, violations []ExportViolation) error {
+	st := status.New(codes.FailedPrecondition, msg)
+	pf := &errdetails.PreconditionFailure{}
+	for _, v := range violations {
+		pf.Violations = append(pf.Violations, &errdetails.PreconditionFailure_Violation{
+			Type:        v.Type,
+			Subject:     v.Subject,
+			Description: v.Description,
+		})
+	}
+	withDetails, err := st.WithDetails(pf, &errdetails.ErrorInfo{Reason: "EXPORT_VALIDATION_FAILED"})
+	if err != nil {
+		return st.Err()
+	}
+	return withDetails.Err()
+}
+
+// ExportViolations extracts the violations built by ExportValidationFailed.
+func ExportViolations(err error) ([]ExportViolation, bool) {
+	st, ok := status.FromError(err)
+	if !ok {
+		return nil, false
+	}
+	for _, d := range st.Details() {
+		pf, ok := d.(*errdetails.PreconditionFailure)
+		if !ok {
+			continue
+		}
+		out := make([]ExportViolation, 0, len(pf.Violations))
+		for _, v := range pf.Violations {
+			out = append(out, ExportViolation{Type: v.Type, Subject: v.Subject, Description: v.Description})
+		}
+		return out, true
+	}
+	return nil, false
+}

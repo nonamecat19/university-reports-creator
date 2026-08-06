@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import { Editor } from '@tiptap/core';
 import { FileService } from '../../../core/services/file.service';
+import { citationNumbersPluginKey } from './schema/citation.extension';
 import { buildSectionExtensions } from './schema/extensions';
 import { numberingPluginKey } from './schema/numbering.extension';
 
@@ -47,6 +48,7 @@ const AUTOSAVE_DEBOUNCE_MS = 2000;
         <button type="button" class="tb-btn" (click)="insertTable()" title="Вставити таблицю"><i class="pi pi-table"></i></button>
         <button type="button" class="tb-btn" (click)="triggerImagePick()" title="Вставити зображення"><i class="pi pi-image"></i></button>
         <button type="button" class="tb-btn" (click)="editor.chain().focus().setHorizontalRule().run()" title="Розрив сторінки"><i class="pi pi-file"></i></button>
+        <button type="button" class="tb-btn" (click)="requestCitation.emit()" title="Вставити посилання на джерело (Ctrl+Shift+C)"><i class="pi pi-bookmark"></i></button>
         <span class="tb-sep"></span>
         <button type="button" class="tb-btn" (click)="editor.chain().focus().undo().run()" title="Скасувати (Ctrl+Z)"><i class="pi pi-undo"></i></button>
         <button type="button" class="tb-btn" (click)="editor.chain().focus().redo().run()" title="Повторити (Ctrl+Y)"><i class="pi pi-refresh"></i></button>
@@ -112,6 +114,14 @@ const AUTOSAVE_DEBOUNCE_MS = 2000;
       font-size: 14pt;
       line-height: 1.5;
     }
+    .editor-surface :global(.citation-label) {
+      color: var(--p-primary-700, #1d4ed8);
+      cursor: default;
+    }
+    .editor-surface :global(.citation-orphan) {
+      color: var(--p-red-500, #ef4444);
+      text-decoration: underline wavy;
+    }
     .editor-surface :global(.doc-number) {
       color: var(--p-text-muted-color, #6b7280);
       font-weight: 600;
@@ -141,6 +151,8 @@ const AUTOSAVE_DEBOUNCE_MS = 2000;
 export class SectionEditorComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) initialContent: object | null = null;
   @Input() numberingMap: Map<string, string> = new Map();
+  /** sourceId -> reference-list number, for citation decorations (FR-BIB-05). */
+  @Input() citationNumbers: Map<string, number> = new Map();
   @Input() editable = true;
 
   /** Emits on every keystroke (current JSON) — cheap, used for live numbering
@@ -148,6 +160,12 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
   @Output() dirty = new EventEmitter<object>();
   /** Emits ~2s after edits stop — the actual autosave payload (FR-EDT-09). */
   @Output() save = new EventEmitter<object>();
+  /** The user asked to cite a source; the parent opens the picker and calls
+   * back into insertCitation() on this instance. */
+  @Output() requestCitation = new EventEmitter<void>();
+  /** Fired when this editor takes focus, so the parent knows which section a
+   * panel action (cite, AI insert) applies to. */
+  @Output() focused = new EventEmitter<void>();
 
   @ViewChild('editorHost', { static: true }) editorHost!: ElementRef<HTMLDivElement>;
   @ViewChild('fileInput') fileInput?: ElementRef<HTMLInputElement>;
@@ -163,6 +181,9 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
     }
     if (changes['numberingMap'] && this.editor) {
       this.pushNumbering();
+    }
+    if (changes['citationNumbers'] && this.editor) {
+      this.pushCitationNumbers();
     }
     if (changes['editable'] && this.editor) {
       this.editor.setEditable(this.editable);
@@ -182,8 +203,22 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
       onSelectionUpdate: () => {
         // Triggers change detection for toolbar active-state bindings.
       },
+      onFocus: () => this.focused.emit(),
     });
     this.pushNumbering();
+    this.pushCitationNumbers();
+  }
+
+  /** Inserts a citation node at the cursor (FR-BIB-05). The rendered `[N]` is
+   * computed from the reference list, so only the source id is stored. */
+  insertCitation(sourceId: string, locator = ''): void {
+    this.editor.chain().focus().insertCitation({ sourceId, locator }).run();
+  }
+
+  private pushCitationNumbers(): void {
+    if (!this.editor) return;
+    const tr = this.editor.state.tr.setMeta(citationNumbersPluginKey, this.citationNumbers);
+    this.editor.view.dispatch(tr);
   }
 
   private pushNumbering(): void {

@@ -208,6 +208,7 @@ test-ts: ## Run Angular tests (single run)
 
 test-python: ## Run Python tests
 	cd service-ai && uv run pytest
+	cd service-render && uv run pytest
 
 # ============================================================================
 # Database Migrations (service-auth)

@@ -24,6 +24,11 @@ service RenderService {
   // (FR-BIB-08..11); used for both editor preview and export.
   rpc RenderBibliography(RenderBibliographyRequest) returns (RenderBibliographyResponse);
 
+  // ResolveSource resolves a DOI/ISBN/URL into draft CSL-JSON (FR-BIB-04).
+  // Resolution lives here because service-render is the single Python home
+  // for citeproc + the metadata resolvers.
+  rpc ResolveSource(ResolveSourceRequest) returns (ResolveSourceResponse);
+
   rpc Ping(PingRequest) returns (PingResponse);
 }
 
@@ -125,6 +130,23 @@ message BibliographyEntry {
 
 message RenderBibliographyResponse {
   repeated BibliographyEntry entries = 1;
+}
+
+// ── Source resolution (FR-BIB-04) ────────────────────────────────────
+
+message ResolveSourceRequest {
+  // DOI, ISBN, URL, or a freeform reference string.
+  string input = 1;
+}
+
+message ResolveSourceResponse {
+  // Draft CSL-JSON; empty when nothing resolved.
+  string csl_json = 1;
+  // doi | isbn | url | none
+  string resolver = 2;
+  // manual | auto | needs_review
+  string fill_status = 3;
+  string warning = 4;
 }
 
 // ── Health ───────────────────────────────────────────────────────────

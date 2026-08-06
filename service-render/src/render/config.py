@@ -16,6 +16,9 @@ class RenderConfig(BaseSettings):
     # NFR-09: zip-bomb guard for uploaded docx templates.
     max_decompressed_bytes: int = 300 * 1024 * 1024
 
+    # FR-BIB-04: outbound metadata lookups (Crossref/OpenLibrary/page fetch).
+    resolver_timeout_seconds: float = 10.0
+
     libreoffice_bin: str = "soffice"
     libreoffice_timeout_seconds: int = 60
 

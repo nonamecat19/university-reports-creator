@@ -175,3 +175,46 @@ func (r *SectionRepository) Reorder(ctx context.Context, documentID string, sect
 	}
 	return r.ListByDocument(ctx, documentID)
 }
+
+// DeleteByDocument cascades sections when their document goes away
+// (FR-DAT-01).
+func (r *SectionRepository) DeleteByDocument(ctx context.Context, documentID string) error {
+	const q = `DELETE section WHERE document_id = $document_id`
+	if _, err := surrealdb.Query[[]Section](ctx, r.db, q, map[string]any{"document_id": documentID}); err != nil {
+		return fmt.Errorf("delete sections of document: %w", err)
+	}
+	return nil
+}
+
+// RestoreFromSnapshot recreates a section with its original id so comment
+// anchors and cross-references that target it keep resolving after a restore
+// (FR-EDT-10). Revision restarts at 0 — every open editor holds a revision
+// from before the restore and must reload.
+func (r *SectionRepository) RestoreFromSnapshot(
+	ctx context.Context,
+	documentID, id, templateSectionID, title, kind string,
+	order int,
+	required bool,
+	content map[string]any,
+) (*Section, error) {
+	if content == nil {
+		content = map[string]any{}
+	}
+	if kind == "" {
+		kind = "chapter"
+	}
+
+	const q = `CREATE type::record($table, $id) CONTENT {
+		document_id: $document_id, template_section_id: $template_section_id, title: $title, kind: $kind,
+		order_index: $order_index, required: $required, revision: 0, content: $content, updated_at: $updated_at
+	}`
+	res, err := surrealdb.Query[[]Section](ctx, r.db, q, map[string]any{
+		"table": sectionTable, "id": id, "document_id": documentID,
+		"template_section_id": templateSectionID, "title": title, "kind": kind,
+		"order_index": order, "required": required, "content": content, "updated_at": time.Now(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("restore section: %w", err)
+	}
+	return single(res)
+}

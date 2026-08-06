@@ -8,6 +8,7 @@ import Underline from '@tiptap/extension-underline';
 import StarterKit from '@tiptap/starter-kit';
 import { BlockId } from './block-id.extension';
 import { CaptionedTable } from './captioned-table.extension';
+import { Citation } from './citation.extension';
 import { FigureImage } from './figure-image.extension';
 import { Numbering } from './numbering.extension';
 import { SuggestionDelete, SuggestionInsert } from './reserved-suggestion-marks.extension';
@@ -17,8 +18,8 @@ import { SuggestionDelete, SuggestionInsert } from './reserved-suggestion-marks.
  * No font-family/size/color marks — typography comes from the template's
  * styles at export, the editor only edits structure and content.
  *
- * Deferred to later phases (not in this schema yet): formulas, citation and
- * cross-reference nodes (FR-EDT-06, 06-bibliography.md), footnotes.
+ * Deferred to later phases (not in this schema yet): formulas and
+ * cross-reference nodes (FR-EDT-06), footnotes.
  */
 export function buildSectionExtensions(): AnyExtension[] {
   return [
@@ -35,6 +36,7 @@ export function buildSectionExtensions(): AnyExtension[] {
     TableRow,
     TableHeader,
     TableCell,
+    Citation,
     BlockId,
     Numbering,
     SuggestionInsert,

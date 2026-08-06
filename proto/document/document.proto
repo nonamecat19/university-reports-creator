@@ -28,6 +28,23 @@ service DocumentService {
   rpc GetExportJob(GetExportJobRequest) returns (ExportJobStatus);
   rpc ListExports(ListExportsRequest) returns (ListExportsResponse);
   rpc PreviewPdf(PreviewPdfRequest) returns (ExportDocumentResponse);
+
+  // Sources & bibliography (FR-API-09, FR-BIB-01..11).
+  rpc AddSource(AddSourceRequest) returns (SourceResponse);
+  rpc UpdateSource(UpdateSourceRequest) returns (SourceResponse);
+  rpc DeleteSource(DeleteSourceRequest) returns (DeleteSourceResponse);
+  rpc ListSources(ListSourcesRequest) returns (ListSourcesResponse);
+  // ResolveSource turns a DOI/ISBN/URL/freeform string into a draft
+  // CSL-JSON the user confirms in the form — never saved blind (FR-BIB-04).
+  rpc ResolveSource(ResolveSourceRequest) returns (ResolveSourceResponse);
+  // GetBibliography renders the document's reference list for editor preview
+  // (FR-BIB-10) using the same citeproc pass the export uses.
+  rpc GetBibliography(GetBibliographyRequest) returns (GetBibliographyResponse);
+
+  // Version snapshots (FR-API-08, FR-EDT-10).
+  rpc CreateSnapshot(CreateSnapshotRequest) returns (SnapshotResponse);
+  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
+  rpc RestoreSnapshot(RestoreSnapshotRequest) returns (DocumentResponse);
 }
 
 enum Role {
@@ -233,4 +250,128 @@ message ListExportsRequest {
 
 message ListExportsResponse {
   repeated ExportJobStatus jobs = 1;
+}
+
+// ── Sources & bibliography (FR-API-09, 06-bibliography.md) ───────────
+
+message Source {
+  string id = 1;
+  string document_id = 2;
+  // CSL-JSON (FR-BIB-02) — style-agnostic input for the citeproc pass;
+  // crosses the wire as JSON per FR-API-04.
+  string csl_json = 3;
+  // uk | en | other — affects ДСТУ rendering.
+  string language = 4;
+  // What the user pasted, kept for re-resolution/debugging.
+  string raw_input = 5;
+  // manual | auto | needs_review (FR-BIB-02)
+  string fill_status = 6;
+  // ISO date the online source was accessed.
+  string access_date = 7;
+  // Forces this source into the list even when uncited (FR-BIB-07).
+  bool include_uncited_override = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message AddSourceRequest {
+  string document_id = 1;
+  string csl_json = 2;
+  string language = 3;
+  string raw_input = 4;
+  string fill_status = 5;
+  string access_date = 6;
+}
+
+message UpdateSourceRequest {
+  string document_id = 1;
+  string source_id = 2;
+  string csl_json = 3;
+  string language = 4;
+  string fill_status = 5;
+  string access_date = 6;
+  bool include_uncited_override = 7;
+}
+
+message DeleteSourceRequest {
+  string document_id = 1;
+  string source_id = 2;
+}
+
+message DeleteSourceResponse {}
+
+message SourceResponse {
+  Source source = 1;
+}
+
+message ListSourcesRequest {
+  string document_id = 1;
+}
+
+message ListSourcesResponse {
+  repeated Source sources = 1;
+}
+
+message ResolveSourceRequest {
+  // DOI, ISBN, URL, or a freeform reference string (FR-BIB-04).
+  string input = 1;
+}
+
+message ResolveSourceResponse {
+  // Draft CSL-JSON for the entry form; empty when nothing resolved.
+  string csl_json = 1;
+  // doi | isbn | url | freeform | none — which resolver answered.
+  string resolver = 2;
+  // manual | auto | needs_review
+  string fill_status = 3;
+  string warning = 4;
+}
+
+message GetBibliographyRequest {
+  string document_id = 1;
+}
+
+message BibliographyEntry {
+  int32 number = 1;
+  string source_id = 2;
+  string formatted = 3;
+}
+
+message GetBibliographyResponse {
+  repeated BibliographyEntry entries = 1;
+  // Source ids cited in section content but missing from the library
+  // (FR-BIB-07) — the client flags these and export blocks on them.
+  repeated string orphaned_citation_ids = 2;
+}
+
+// ── Version snapshots (FR-API-08, FR-EDT-10) ─────────────────────────
+
+message Snapshot {
+  string id = 1;
+  string document_id = 2;
+  string name = 3;
+  // manual | export | bulk_accept | auto
+  string trigger = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message CreateSnapshotRequest {
+  string document_id = 1;
+  string name = 2;
+}
+
+message SnapshotResponse {
+  Snapshot snapshot = 1;
+}
+
+message ListSnapshotsRequest {
+  string document_id = 1;
+}
+
+message ListSnapshotsResponse {
+  repeated Snapshot snapshots = 1;
+}
+
+message RestoreSnapshotRequest {
+  string document_id = 1;
+  string snapshot_id = 2;
 }

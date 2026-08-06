@@ -1,5 +1,13 @@
 import { CdkDrag, type CdkDragDrop, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
-import { Component, Input, inject, type OnInit, signal } from '@angular/core';
+import {
+  Component,
+  Input,
+  inject,
+  type OnInit,
+  type QueryList,
+  signal,
+  ViewChildren,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { RpcError } from '@protobuf-ts/runtime-rpc';
@@ -18,7 +26,9 @@ import {
   SectionKind,
 } from '../../../core/services/document.service';
 import { FileService } from '../../../core/services/file.service';
+import { SourceService } from '../../../core/services/source.service';
 import { AiTabComponent } from '../../ai/ai-tab.component';
+import { SourcesPanelComponent } from '../sources/sources-panel.component';
 import { hydrateImages, parseSectionContent } from './document-content.util';
 import { captionText, computeNumbering, type PMNode } from './numbering';
 import { SectionEditorComponent } from './section-editor.component';
@@ -55,6 +65,7 @@ const METADATA_DEBOUNCE_MS = 2000;
     CdkDropList,
     CdkDrag,
     AiTabComponent,
+    SourcesPanelComponent,
     SectionEditorComponent,
   ],
   template: `
@@ -153,10 +164,14 @@ const METADATA_DEBOUNCE_MS = 2000;
               </div>
               @if (sectionContent()[section.id]) {
                 <app-section-editor
+                  [attr.data-section-id]="section.id"
                   [initialContent]="sectionContent()[section.id]"
                   [numberingMap]="numbering().blockNumbers"
+                  [citationNumbers]="sourceService.citationNumbers()"
                   (dirty)="onSectionDirty(section.id, $event)"
                   (save)="onSectionSave(section.id, $event)"
+                  (focused)="activeSectionId.set(section.id)"
+                  (requestCitation)="focusSourcesPanel(section.id)"
                 />
               }
             </section>
@@ -164,7 +179,29 @@ const METADATA_DEBOUNCE_MS = 2000;
         </main>
 
         <aside class="side-panel">
-          <app-ai-tab />
+          <div class="panel-tabs">
+            <button
+              type="button"
+              class="panel-tab"
+              [class.active]="sidePanelTab() === 'sources'"
+              (click)="sidePanelTab.set('sources')"
+            >
+              {{ 'sources.tab' | translate }}
+            </button>
+            <button
+              type="button"
+              class="panel-tab"
+              [class.active]="sidePanelTab() === 'ai'"
+              (click)="sidePanelTab.set('ai')"
+            >
+              {{ 'ai.tab' | translate }}
+            </button>
+          </div>
+          @if (sidePanelTab() === 'sources') {
+            <app-sources-panel (cite)="insertCitation($event)" />
+          } @else {
+            <app-ai-tab />
+          }
         </aside>
       </div>
     }
@@ -253,6 +290,26 @@ const METADATA_DEBOUNCE_MS = 2000;
       padding: 0.75rem;
       max-height: calc(100vh - 2rem);
       overflow-y: auto;
+    }
+    .panel-tabs {
+      display: flex;
+      gap: 0.25rem;
+      margin-bottom: 0.5rem;
+      border-bottom: 1px solid var(--p-content-border-color, #dcdfe4);
+    }
+    .panel-tab {
+      border: none;
+      background: transparent;
+      padding: 0.4rem 0.6rem;
+      cursor: pointer;
+      font-size: 0.8rem;
+      border-bottom: 2px solid transparent;
+      color: inherit;
+    }
+    .panel-tab.active {
+      border-bottom-color: var(--p-primary-500, #3b82f6);
+      color: var(--p-primary-700, #1d4ed8);
+      font-weight: 600;
     }
     .outline-header {
       display: flex;
@@ -394,6 +451,7 @@ export class DocumentEditorComponent implements OnInit {
   private readonly documentService = inject(DocumentService);
   private readonly authService = inject(AuthService);
   private readonly fileService = inject(FileService);
+  protected readonly sourceService = inject(SourceService);
   private readonly translate = inject(TranslateService);
 
   readonly loading = signal(true);
@@ -408,6 +466,12 @@ export class DocumentEditorComponent implements OnInit {
   readonly exportVisible = signal(false);
   readonly exporting = signal(false);
   readonly exportJob = signal<ExportJobStatus | null>(null);
+  readonly sidePanelTab = signal<'sources' | 'ai'>('sources');
+  /** Which section a panel action (cite, AI insert) applies to — the last one
+   * that had focus. */
+  readonly activeSectionId = signal('');
+
+  @ViewChildren(SectionEditorComponent) sectionEditors!: QueryList<SectionEditorComponent>;
 
   protected readonly metadataFields = WELL_KNOWN_METADATA_FIELDS;
   protected readonly sectionKindOptions = [
@@ -448,6 +512,8 @@ export class DocumentEditorComponent implements OnInit {
       }
       this.sectionContent.set(contentMap);
       this.recomputeNumbering();
+      this.activeSectionId.set(ordered[0]?.id ?? '');
+      await this.sourceService.load(this.id);
       await this.prefillMetadataFromProfile(document);
     } finally {
       this.loading.set(false);
@@ -522,6 +588,26 @@ export class DocumentEditorComponent implements OnInit {
   onSectionDirty(sectionId: string, json: PMNode): void {
     this.liveSectionContent.set(sectionId, json);
     this.recomputeNumbering();
+  }
+
+  /** Toolbar "cite" button: the picker lives in the sources panel, so opening
+   * that tab *is* the picker (FR-BIB-05 — type-to-search then Enter). */
+  focusSourcesPanel(sectionId: string): void {
+    this.activeSectionId.set(sectionId);
+    this.sidePanelTab.set('sources');
+  }
+
+  /** Inserts a citation into the section that last had focus, then re-renders
+   * the reference list so `by_order` numbering picks up the new occurrence
+   * (FR-BIB-06). */
+  async insertCitation(sourceId: string): Promise<void> {
+    const editors = this.sectionEditors?.toArray() ?? [];
+    const index = this.sections().findIndex((s) => s.id === this.activeSectionId());
+    const target = editors[index >= 0 ? index : 0];
+    if (!target) return;
+    target.insertCitation(sourceId);
+    target.flushNow();
+    await this.sourceService.refreshBibliography();
   }
 
   async onSectionSave(sectionId: string, json: object): Promise<void> {

@@ -6,8 +6,10 @@ import "encoding/json"
 // Only the fields CreateDocument needs to instantiate sections/metadata are
 // modeled here — the rest of the model rides through opaquely as ModelJson.
 type templateModelField struct {
-	Name    string `json:"name"`
-	Default string `json:"default"`
+	Name     string `json:"name"`
+	Label    string `json:"label"`
+	Required bool   `json:"required"`
+	Default  string `json:"default"`
 }
 
 type templateModelSection struct {

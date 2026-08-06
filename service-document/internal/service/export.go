@@ -15,6 +15,7 @@ import (
 	pb "github.com/nnc/university-reports-creator/gen/go/document"
 	filepb "github.com/nnc/university-reports-creator/gen/go/file"
 	renderpb "github.com/nnc/university-reports-creator/gen/go/render"
+	"github.com/nnc/university-reports-creator/pkg/shared/grpcerr"
 	"github.com/nnc/university-reports-creator/service-document/internal/repository"
 )
 
@@ -108,7 +109,25 @@ func (s *DocumentService) runExportPipeline(
 		return nil, status.Errorf(codes.Internal, "failed to list sections: %v", err)
 	}
 
-	job, err := s.Repos.ExportJob.Create(ctx, doc.ID, ownerID, map[string]any{
+	sourcesCSL, orphans, err := s.bibliographyInput(ctx, doc)
+	if err != nil {
+		return nil, err
+	}
+
+	// FR-EXP-06: the server re-validates whatever the client's checklist
+	// dialog already checked, and refuses with a structured violation list.
+	if violations := validateForExport(doc, version, sections, orphans); len(violations) > 0 {
+		return nil, grpcerr.ExportValidationFailed("export blocked by validation", violations)
+	}
+
+	// FR-EDT-10: a version snapshot is taken at export time and linked to the
+	// job, so every artifact can be traced to the exact state it came from.
+	snapshot, err := s.takeSnapshot(ctx, doc, "", "export")
+	if err != nil {
+		return nil, err
+	}
+
+	job, err := s.Repos.ExportJob.Create(ctx, doc.ID, ownerID, snapshot.ID, map[string]any{
 		"format":               format,
 		"suggestions_strategy": suggestionsStrategy,
 		"table_continuation":   tableContinuation,
@@ -118,7 +137,7 @@ func (s *DocumentService) runExportPipeline(
 		return nil, status.Errorf(codes.Internal, "failed to create export job: %v", err)
 	}
 
-	artifacts, warnings, pipelineErr := s.doExport(ctx, doc, template, version, sections, format, suggestionsStrategy, tableContinuation)
+	artifacts, warnings, pipelineErr := s.doExport(ctx, doc, template, version, sections, sourcesCSL, format, suggestionsStrategy, tableContinuation)
 	if pipelineErr != nil {
 		if failed, ferr := s.Repos.ExportJob.Fail(ctx, job.ID, pipelineErr.Error()); ferr == nil {
 			job = failed
@@ -139,6 +158,7 @@ func (s *DocumentService) doExport(
 	template *repository.Template,
 	version *repository.TemplateVersion,
 	sections []repository.Section,
+	sourcesCSL []string,
 	format, suggestionsStrategy, tableContinuation string,
 ) ([]repository.ExportArtifact, []string, error) {
 	templateFile, err := s.Clients.Files.Download(ctx, &filepb.DownloadRequest{Id: version.FileKey})
@@ -181,9 +201,9 @@ func (s *DocumentService) doExport(
 		ModelJson:    string(modelJSON),
 		Metadata:     doc.Metadata,
 		Sections:     renderSections,
-		// Bibliography source management isn't wired up yet (06-bibliography.md);
-		// the {{bibliography}} marker, if present, renders as an empty list.
-		SourcesCslJson: []string{},
+		// Sources arrive already ordered per the document's numbering mode
+		// (FR-BIB-06) — see bibliographyInput.
+		SourcesCslJson: sourcesCSL,
 		Options: &renderpb.RenderOptions{
 			NumberingMode:       doc.Settings.NumberingMode,
 			TableContinuation:   tableContinuation,

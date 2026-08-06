@@ -1,6 +1,5 @@
 {
   "brand": "UniReports",
-
   "sidebar": {
     "dashboard": "Dashboard",
     "documents": "Documents",
@@ -11,7 +10,6 @@
     "team": "Team",
     "settings": "Settings"
   },
-
   "header": {
     "account": "Account",
     "profile": "Profile",
@@ -19,7 +17,6 @@
     "logout": "Logout",
     "user_fallback": "User"
   },
-
   "login": {
     "create_account": "Create your account",
     "sign_in_account": "Sign in to your account",
@@ -44,7 +41,6 @@
     "has_account": "Already have an account?",
     "sign_in_link": "Sign in"
   },
-
   "dashboard": {
     "welcome_back": "Welcome back, {{name}}",
     "subtitle": "Here's what's happening with your reports",
@@ -55,7 +51,6 @@
     "no_templates_available": "No templates available",
     "view_all": "View All"
   },
-
   "documents": {
     "title": "Documents",
     "new_document": "New document",
@@ -69,7 +64,6 @@
     "create": "Create",
     "save": "Save"
   },
-
   "editor": {
     "loading": "Loading document…",
     "not_found": "Document not found",
@@ -107,7 +101,6 @@
     "export_format_docx_pdf": "DOCX + PDF",
     "export_done": "Done. Download the files below:"
   },
-
   "projects": {
     "title": "Projects",
     "subtitle": "Manage your university report projects",
@@ -137,7 +130,6 @@
       "archived": "Archived"
     }
   },
-
   "project_detail": {
     "edit_project": "Edit Project",
     "new_report": "New Report",
@@ -164,7 +156,6 @@
     "activity_status_changed": "Status Changed",
     "activity_report_added": "Report Added"
   },
-
   "templates": {
     "title": "Templates",
     "subtitle": "Manage report templates for your university reports",
@@ -210,7 +201,6 @@
     "create": "Upload and parse",
     "upload_failed": "Failed to upload or parse the template"
   },
-
   "template_detail": {
     "edit_template": "Edit Template",
     "use_template": "Use Template",
@@ -251,7 +241,6 @@
       "rich_text": "Rich Text"
     }
   },
-
   "settings": {
     "title": "Settings",
     "language": "Language",
@@ -279,7 +268,6 @@
       "error_detail": "Failed to save profile. Please try again."
     }
   },
-
   "common": {
     "cancel": "Cancel",
     "save": "Save",
@@ -290,5 +278,48 @@
     "loading": "Loading…",
     "search": "Search",
     "no_data": "No data available"
+  },
+  "sources": {
+    "tab": "Sources",
+    "title": "Sources",
+    "empty": "No sources yet",
+    "untitled": "Untitled",
+    "needs_review": "Needs review",
+    "cite": "Cite",
+    "autofill_placeholder": "DOI, ISBN or URL…",
+    "orphans": "Citations pointing at deleted sources: {{count}}. Fix them before export.",
+    "bibliography": "Reference list",
+    "bibliography_empty": "The list is empty",
+    "form_title": "Source",
+    "authors_hint": "Family, Given; Family, Given",
+    "field": {
+      "type": "Type",
+      "title": "Title",
+      "authors": "Authors",
+      "container": "Journal / collection",
+      "publisher": "Publisher",
+      "place": "Place",
+      "year": "Year",
+      "page": "Pages",
+      "volume": "Volume",
+      "issue": "Issue",
+      "access_date": "Access date",
+      "language": "Language"
+    },
+    "type": {
+      "book": "Book",
+      "chapter": "Book chapter",
+      "article": "Journal article",
+      "conference": "Conference paper",
+      "thesis": "Thesis / dissertation",
+      "standard": "Standard (DSTU/ISO)",
+      "legislation": "Law / regulation",
+      "webpage": "Web page",
+      "software": "Software / dataset",
+      "other": "Other"
+    }
+  },
+  "ai": {
+    "tab": "AI"
   }
 }

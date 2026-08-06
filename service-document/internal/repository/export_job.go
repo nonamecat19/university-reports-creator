@@ -22,6 +22,7 @@ type ExportJob struct {
 	ID          string           `json:"-"`
 	RawID       models.RecordID  `json:"id"`
 	DocumentID  string           `json:"document_id"`
+	SnapshotID  string           `json:"snapshot_id"`
 	RequestedBy string           `json:"requested_by"`
 	Options     map[string]any   `json:"options"`
 	Status      string           `json:"status"`
@@ -47,16 +48,16 @@ func NewExportJobRepository(db *surrealdb.DB) *ExportJobRepository {
 // the caller runs the pipeline synchronously and calls Complete/Fail right
 // after, but the job record still exists for GetExportJob/ListExports polling
 // per the FR-API-11a contract.
-func (r *ExportJobRepository) Create(ctx context.Context, documentID, requestedBy string, options map[string]any) (*ExportJob, error) {
+func (r *ExportJobRepository) Create(ctx context.Context, documentID, requestedBy, snapshotID string, options map[string]any) (*ExportJob, error) {
 	id := uuid.New().String()
 	now := time.Now()
 
 	const q = `CREATE type::record($table, $id) CONTENT {
-		document_id: $document_id, requested_by: $requested_by, options: $options,
+		document_id: $document_id, snapshot_id: $snapshot_id, requested_by: $requested_by, options: $options,
 		status: 'running', stage: 'starting', warnings: [], artifacts: [], error: '', created_at: $created_at
 	}`
 	res, err := surrealdb.Query[[]ExportJob](ctx, r.db, q, map[string]any{
-		"table": exportJobTable, "id": id, "document_id": documentID,
+		"table": exportJobTable, "id": id, "document_id": documentID, "snapshot_id": snapshotID,
 		"requested_by": requestedBy, "options": options, "created_at": now,
 	})
 	if err != nil {
@@ -107,4 +108,15 @@ func (r *ExportJobRepository) ListByDocument(ctx context.Context, documentID str
 		return nil, fmt.Errorf("list export jobs: %w", err)
 	}
 	return rows(res)
+}
+
+// DeleteByDocument cascades export jobs when their document goes away
+// (FR-DAT-01). Artifact objects in MinIO are removed by the caller, which
+// owns the service-files client.
+func (r *ExportJobRepository) DeleteByDocument(ctx context.Context, documentID string) error {
+	const q = `DELETE export_job WHERE document_id = $document_id`
+	if _, err := surrealdb.Query[[]ExportJob](ctx, r.db, q, map[string]any{"document_id": documentID}); err != nil {
+		return fmt.Errorf("delete export jobs of document: %w", err)
+	}
+	return nil
 }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -12,6 +13,7 @@ from .bibliography import render_entries
 from .config import RenderConfig
 from .docx_export import RenderSectionInput, render_docx
 from .pdf_convert import PdfConversionError, convert_docx_to_pdf
+from .resolvers import resolve as resolve_source
 from .template_parser import TemplateParseError, parse_template
 
 logger = logging.getLogger(__name__)
@@ -112,6 +114,20 @@ class RenderServicer:
                 render_pb2.BibliographyEntry(number=e["number"], source_id=e["source_id"], formatted=e["formatted"])
                 for e in entries
             ]
+        )
+
+    async def ResolveSource(self, request: Any, context: grpc.aio.ServicerContext) -> Any:
+        from render.proto import render_pb2
+
+        # Network I/O is blocking (httpx sync client), so it runs off the
+        # event loop — otherwise one slow publisher stalls every RPC the
+        # server is serving.
+        result = await asyncio.to_thread(resolve_source, request.input, self._config.resolver_timeout_seconds)
+        return render_pb2.ResolveSourceResponse(
+            csl_json=json.dumps(result.csl, ensure_ascii=False) if result.csl else "",
+            resolver=result.resolver,
+            fill_status=result.fill_status,
+            warning=result.warning,
         )
 
 

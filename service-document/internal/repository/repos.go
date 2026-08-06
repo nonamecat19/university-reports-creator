@@ -7,6 +7,8 @@ type Repos struct {
 	Section   *SectionRepository
 	Template  *TemplateRepository
 	ExportJob *ExportJobRepository
+	Source    *SourceRepository
+	Snapshot  *SnapshotRepository
 }
 
 func New(db *surrealdb.DB) *Repos {
@@ -15,5 +17,7 @@ func New(db *surrealdb.DB) *Repos {
 		Section:   NewSectionRepository(db),
 		Template:  NewTemplateRepository(db),
 		ExportJob: NewExportJobRepository(db),
+		Source:    NewSourceRepository(db),
+		Snapshot:  NewSnapshotRepository(db),
 	}
 }

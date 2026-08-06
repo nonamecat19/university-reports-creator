@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/nnc/university-reports-creator/gen/go/document"
+	filepb "github.com/nnc/university-reports-creator/gen/go/file"
 	"github.com/nnc/university-reports-creator/pkg/shared/grpcerr"
 	"github.com/nnc/university-reports-creator/pkg/shared/grpcmeta"
 	"github.com/nnc/university-reports-creator/service-document/internal/repository"
@@ -288,9 +290,12 @@ func (s *DocumentService) DeleteDocument(ctx context.Context, req *pb.DeleteDocu
 	if err != nil {
 		return nil, err
 	}
+	// Ownership is proven by the document delete itself; the cascade runs
+	// after it so a non-owner never reaches the child deletes (FR-DAT-01).
 	if err := s.Repos.Document.Delete(ctx, req.GetId(), ownerID); err != nil {
 		return nil, err
 	}
+	s.cascadeDelete(ctx, req.GetId())
 	return &pb.DeleteDocumentResponse{}, nil
 }
 
@@ -340,5 +345,55 @@ func sectionToProto(sec *repository.Section) *pb.Section {
 		Revision:          int32(sec.Revision),
 		ContentJson:       content,
 		UpdatedAt:         timestamppb.New(sec.UpdatedAt),
+	}
+}
+
+// cascadeDelete removes everything that hangs off a deleted document, across
+// both stores (FR-DAT-01): child records in SurrealDB and export artifacts +
+// embedded images in MinIO. Referential integrity is application-enforced —
+// neither store does it for us.
+//
+// Failures are logged, not returned: the document is already gone, so the
+// delete has succeeded from the caller's point of view and retrying it would
+// just 404. Anything left behind is an orphan blob, not a correctness bug.
+func (s *DocumentService) cascadeDelete(ctx context.Context, documentID string) {
+	jobs, err := s.Repos.ExportJob.ListByDocument(ctx, documentID)
+	if err != nil {
+		slog.WarnContext(ctx, "cascade delete: list export jobs", "document_id", documentID, "error", err)
+	}
+	for _, job := range jobs {
+		for _, artifact := range job.Artifacts {
+			if _, err := s.Clients.Files.Delete(ctx, &filepb.DeleteRequest{Id: artifact.FileKey}); err != nil {
+				slog.WarnContext(ctx, "cascade delete: remove export artifact", "file_key", artifact.FileKey, "error", err)
+			}
+		}
+	}
+
+	sections, err := s.Repos.Section.ListByDocument(ctx, documentID)
+	if err != nil {
+		slog.WarnContext(ctx, "cascade delete: list sections", "document_id", documentID, "error", err)
+	}
+	imageKeys := map[string]bool{}
+	for i := range sections {
+		collectImageObjectKeys(sections[i].Content, imageKeys)
+	}
+	for key := range imageKeys {
+		if _, err := s.Clients.Files.Delete(ctx, &filepb.DeleteRequest{Id: key}); err != nil {
+			slog.WarnContext(ctx, "cascade delete: remove image", "file_key", key, "error", err)
+		}
+	}
+
+	for _, del := range []struct {
+		what string
+		fn   func(context.Context, string) error
+	}{
+		{"sections", s.Repos.Section.DeleteByDocument},
+		{"sources", s.Repos.Source.DeleteByDocument},
+		{"snapshots", s.Repos.Snapshot.DeleteByDocument},
+		{"export jobs", s.Repos.ExportJob.DeleteByDocument},
+	} {
+		if err := del.fn(ctx, documentID); err != nil {
+			slog.WarnContext(ctx, "cascade delete failed", "what", del.what, "document_id", documentID, "error", err)
+		}
 	}
 }

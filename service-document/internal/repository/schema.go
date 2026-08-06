@@ -59,6 +59,7 @@ DEFINE INDEX IF NOT EXISTS idx_section_document ON section FIELDS document_id;
 
 DEFINE TABLE IF NOT EXISTS export_job SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS document_id ON export_job TYPE string;
+DEFINE FIELD IF NOT EXISTS snapshot_id ON export_job TYPE string DEFAULT '';
 DEFINE FIELD IF NOT EXISTS requested_by ON export_job TYPE string;
 DEFINE FIELD IF NOT EXISTS options ON export_job TYPE object FLEXIBLE DEFAULT {};
 DEFINE FIELD IF NOT EXISTS status ON export_job TYPE string DEFAULT 'queued';
@@ -70,6 +71,25 @@ DEFINE FIELD IF NOT EXISTS error ON export_job TYPE string DEFAULT '';
 DEFINE FIELD IF NOT EXISTS created_at ON export_job TYPE datetime;
 DEFINE FIELD IF NOT EXISTS finished_at ON export_job TYPE option<datetime>;
 DEFINE INDEX IF NOT EXISTS idx_export_job_document ON export_job FIELDS document_id;
+
+DEFINE TABLE IF NOT EXISTS source SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS document_id ON source TYPE string;
+DEFINE FIELD IF NOT EXISTS csl ON source TYPE object FLEXIBLE DEFAULT {};
+DEFINE FIELD IF NOT EXISTS language ON source TYPE string DEFAULT 'uk';
+DEFINE FIELD IF NOT EXISTS raw_input ON source TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS fill_status ON source TYPE string DEFAULT 'manual';
+DEFINE FIELD IF NOT EXISTS access_date ON source TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS include_uncited_override ON source TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS created_at ON source TYPE datetime;
+DEFINE INDEX IF NOT EXISTS idx_source_document ON source FIELDS document_id;
+
+DEFINE TABLE IF NOT EXISTS snapshot SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS document_id ON snapshot TYPE string;
+DEFINE FIELD IF NOT EXISTS name ON snapshot TYPE string DEFAULT '';
+DEFINE FIELD IF NOT EXISTS trigger ON snapshot TYPE string DEFAULT 'manual';
+DEFINE FIELD IF NOT EXISTS data ON snapshot TYPE object FLEXIBLE DEFAULT {};
+DEFINE FIELD IF NOT EXISTS created_at ON snapshot TYPE datetime;
+DEFINE INDEX IF NOT EXISTS idx_snapshot_document ON snapshot FIELDS document_id;
 `
 
 // ApplySchema applies the DEFINE statements above. Safe to run on every
