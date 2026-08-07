@@ -94,11 +94,30 @@
       "city": "Місто",
       "year": "Рік"
     },
+    "versions": "Версії",
+    "versions_dialog": "Версії документа",
+    "versions_empty": "Збережених версій ще немає.",
+    "version_name_placeholder": "Назва версії (необов'язково)",
+    "save_version": "Зберегти версію",
+    "restore_version": "Відновити",
+    "restore_confirm": "Відновити версію «{{name}}»? Поточний стан буде збережено окремою версією.",
+    "version_trigger": {
+      "manual": "Ручна",
+      "export": "Перед експортом",
+      "bulk_accept": "Перед застосуванням правок",
+      "auto": "Автоматична"
+    },
+    "cross_reference_dialog": "Перехресне посилання",
+    "cross_reference_empty": "У документі ще немає пронумерованих об’єктів для посилання.",
     "export": "Експорт",
     "export_dialog": "Експорт документа",
     "export_format_label": "Формат",
     "export_format_docx": "Тільки DOCX",
     "export_format_docx_pdf": "DOCX + PDF",
+    "table_continuation_label": "Таблиці на кількох сторінках",
+    "table_continuation_repeat_header": "Повторювати шапку таблиці (стандартно)",
+    "table_continuation_caption": "Додавати «Продовження таблиці N»",
+    "table_continuation_hint": "Позиції розривів обчислюються під час експорту; редагування файлу у Word може їх зсунути.",
     "export_done": "Готово. Завантажте файли нижче:"
   },
   "projects": {

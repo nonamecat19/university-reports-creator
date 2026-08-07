@@ -64,7 +64,9 @@ import { ReviewService, Role, shareLinkUrl } from '../../../core/services/review
       <ul class="share-list">
         @for (share of review.shares(); track share.id) {
           <li [class.revoked]="share.revoked">
-            <span class="who">{{ share.email || share.userId || ('review.link_share' | translate) }}</span>
+            <span class="who">{{
+              share.userName || share.email || share.userId || ('review.link_share' | translate)
+            }}</span>
             <p-tag [value]="roleLabel(share.role)" severity="secondary" />
             @if (share.revoked) {
               <p-tag severity="danger" [value]="'review.revoked' | translate" />

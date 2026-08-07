@@ -94,11 +94,30 @@
       "city": "City",
       "year": "Year"
     },
+    "versions": "Versions",
+    "versions_dialog": "Document versions",
+    "versions_empty": "No saved versions yet.",
+    "version_name_placeholder": "Version name (optional)",
+    "save_version": "Save version",
+    "restore_version": "Restore",
+    "restore_confirm": "Restore version \u00ab{{name}}\u00bb? The current state is saved as its own version first.",
+    "version_trigger": {
+      "manual": "Manual",
+      "export": "Before export",
+      "bulk_accept": "Before applying suggestions",
+      "auto": "Automatic"
+    },
+    "cross_reference_dialog": "Cross-reference",
+    "cross_reference_empty": "The document has no numbered objects to reference yet.",
     "export": "Export",
     "export_dialog": "Export document",
     "export_format_label": "Format",
     "export_format_docx": "DOCX only",
     "export_format_docx_pdf": "DOCX + PDF",
+    "table_continuation_label": "Tables spanning pages",
+    "table_continuation_repeat_header": "Repeat the header row (standard)",
+    "table_continuation_caption": "Insert \u00abContinuation of table N\u00bb",
+    "table_continuation_hint": "Break positions are computed at export time; editing the file in Word can move them.",
     "export_done": "Done. Download the files below:"
   },
   "projects": {

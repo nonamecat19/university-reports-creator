@@ -1,18 +1,27 @@
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, computed, inject, type OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { TransformKind } from '@gen/ai/ai';
 import { Button } from 'primeng/button';
 import { InputTextarea } from 'primeng/inputtextarea';
 import { ProgressSpinner } from 'primeng/progressspinner';
 import { ScrollPanel } from 'primeng/scrollpanel';
 import { Tag } from 'primeng/tag';
 import { Tooltip } from 'primeng/tooltip';
-import { AiService } from './ai.service';
 import {
-  AIAction,
-  AI_ACTION_LABELS,
   AI_ACTION_ICONS,
-  type AIRun,
+  AI_ACTION_LABELS,
+  AIAction,
+  type AIStatus,
 } from '../../shared/models/ai.model';
+import { AiService } from './ai.service';
+
+/** Quick actions that map onto TransformSelection rather than a free prompt. */
+const TRANSFORM_KINDS: Partial<Record<AIAction, TransformKind>> = {
+  [AIAction.REPHRASE]: TransformKind.REPHRASE,
+  [AIAction.EXPAND]: TransformKind.EXPAND,
+  [AIAction.CONDENSE]: TransformKind.CONDENSE,
+  [AIAction.TRANSLATE]: TransformKind.TRANSLATE,
+};
 
 @Component({
   selector: 'app-ai-tab',
@@ -37,6 +46,25 @@ import {
           />
         }
       </div>
+
+      @if (status(); as ai) {
+        @if (!ai.enabled) {
+          <div class="ai-notice ai-notice-disabled" data-testid="ai-disabled-notice">
+            Функції ШІ вимкнено в цій інсталяції.
+          </div>
+        } @else {
+          <div class="ai-notice" [class.ai-notice-cloud]="!ai.localProvider" data-testid="ai-provider-notice">
+            @if (ai.localProvider) {
+              Модель {{ ai.model }} виконується локально — текст документа не залишає систему.
+            } @else {
+              Увага: провайдер {{ ai.provider }} — хмарний. Текст документа надсилається зовнішньому сервісу.
+            }
+            @if (!ai.grammarAvailable) {
+              <span class="ai-notice-sub">Перевірка граматики (LanguageTool) недоступна — працює лише стилістичний аналіз.</span>
+            }
+          </div>
+        }
+      }
 
       <!-- Quick actions -->
       <div class="ai-actions" data-testid="ai-quick-actions">
@@ -139,6 +167,29 @@ import {
     </div>
   `,
   styles: `
+    /* Privacy / availability banner (FR-AI-04). */
+    .ai-notice {
+      margin: 0 0.75rem 0.5rem;
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      line-height: 1.35;
+      background: var(--p-green-50, #f0fdf4);
+      color: var(--p-green-800, #166534);
+    }
+    .ai-notice-cloud {
+      background: var(--p-yellow-50, #fefce8);
+      color: var(--p-yellow-800, #854d0e);
+    }
+    .ai-notice-disabled {
+      background: var(--p-surface-100, #f1f3f6);
+      color: var(--p-text-muted-color, #6b7280);
+    }
+    .ai-notice-sub {
+      display: block;
+      margin-top: 0.2rem;
+      opacity: 0.85;
+    }
     .ai-tab {
       display: flex;
       flex-direction: column;
@@ -290,7 +341,7 @@ import {
     }
   `,
 })
-export class AiTabComponent {
+export class AiTabComponent implements OnInit {
   readonly aiService = inject(AiService);
 
   readonly actionLabels = AI_ACTION_LABELS;
@@ -298,6 +349,12 @@ export class AiTabComponent {
 
   readonly selectedAction = signal<AIAction>(AIAction.DRAFT);
   readonly inputText = signal('');
+  /** Null until the first status call answers (FR-AI-04/05). */
+  readonly status = signal<AIStatus | null>(null);
+
+  async ngOnInit(): Promise<void> {
+    this.status.set(await this.aiService.status());
+  }
 
   readonly quickActions: AIAction[] = [
     AIAction.ANALYZE,
@@ -367,6 +424,17 @@ export class AiTabComponent {
         await this.aiService.analyzeDocument('', prompt, '', '', []);
       } else if (action === AIAction.GRAMMAR) {
         await this.aiService.checkGrammar(prompt, 'uk', true);
+      } else if (action === AIAction.CONTINUE) {
+        await this.aiService.continueWriting({ precedingText: prompt });
+      } else if (TRANSFORM_KINDS[action] !== undefined) {
+        // Transforms have their own RPC: the service owns the prompt and the
+        // token budget per transform, so the client only names the transform
+        // (FR-AI-06/07 — prompts live in service-ai, never in the client).
+        await this.aiService.transformSelection({
+          text: prompt,
+          transform: TRANSFORM_KINDS[action] as TransformKind,
+          targetLanguage: action === AIAction.TRANSLATE ? 'en' : '',
+        });
       } else {
         await this.aiService.generateStream({
           action,

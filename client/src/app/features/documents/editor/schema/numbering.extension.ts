@@ -67,6 +67,16 @@ export const Numbering = Extension.create({
                     { side: 1 }
                   )
                 );
+              } else if (node.type.name === 'formulaBlock') {
+                // The number sits on the formula's own line, right-aligned
+                // (ДСТУ 3008:2015) — a node decoration hands it to the node
+                // view's CSS rather than inserting a widget that would break
+                // the centred layout.
+                decorations.push(
+                  Decoration.node(pos, pos + node.nodeSize, {
+                    'data-number': captionText.formula(number),
+                  })
+                );
               } else if (node.type.name === 'table') {
                 decorations.push(
                   Decoration.widget(

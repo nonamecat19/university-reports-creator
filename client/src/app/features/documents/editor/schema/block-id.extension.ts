@@ -14,6 +14,7 @@ export const BLOCK_ID_NODE_TYPES = [
   'orderedList',
   'table',
   'image',
+  'formulaBlock',
   'codeBlock',
   'horizontalRule',
 ];

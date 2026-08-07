@@ -79,7 +79,12 @@ export interface SuggestionResolution {
           </h4>
           @for (suggestion of review.pendingSuggestions(); track suggestion.id) {
             <div class="suggestion-row">
-              <span class="suggestion-kind">{{ kindLabel(suggestion) }}</span>
+              <span class="suggestion-kind">
+                {{ kindLabel(suggestion) }}
+                @if (suggestion.authorName) {
+                  · {{ suggestion.authorName }}
+                }
+              </span>
               @if (review.canEdit()) {
                 <div class="suggestion-actions">
                   <p-button
@@ -131,7 +136,7 @@ export interface SuggestionResolution {
           >
             <div class="thread-head">
               <span class="author">
-                {{ thread.root.author === 'ai' ? ('review.ai_author' | translate) : thread.root.author }}
+                {{ thread.root.author === 'ai' ? ('review.ai_author' | translate) : authorLabel(thread.root) }}
               </span>
               @if (thread.root.author === 'ai') {
                 <p-tag severity="info" value="AI" />
@@ -147,7 +152,7 @@ export interface SuggestionResolution {
 
             @for (reply of thread.replies; track reply.id) {
               <div class="reply">
-                <span class="author">{{ reply.author }}</span>
+                <span class="author">{{ authorLabel(reply) }}</span>
                 <p class="body">{{ reply.body }}</p>
               </div>
             }
@@ -250,6 +255,12 @@ export class ReviewPanelComponent {
     { value: CommentFilter.MINE, label: 'Мої' },
     { value: CommentFilter.AI, label: 'AI' },
   ];
+
+  /** The name captured when the comment was written; falls back to the raw
+   * user id for comments written before names were recorded. */
+  authorLabel(comment: Comment): string {
+    return comment.authorName || comment.author;
+  }
 
   kindLabel(suggestion: Suggestion): string {
     return suggestion.kind === 'delete' ? 'Видалення' : 'Вставка';

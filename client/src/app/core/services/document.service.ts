@@ -16,6 +16,22 @@ export interface DocumentSummary {
   updatedAt?: Date;
 }
 
+/** How a table that spans a page break is handled at export (FR-TBL-08/09).
+ * `repeat_header` is always standard-compliant; `continuation_caption` is
+ * best-effort — it paginates the file to find the breaks, and editing it in
+ * Word afterwards can move them. */
+export type TableContinuation = 'repeat_header' | 'continuation_caption';
+
+/** `trigger` is what caused the snapshot: manual | export | bulk_accept | auto
+ * (FR-EDT-10) — the browser labels automatic ones so a student can tell their
+ * own "Save version" apart from the system's. */
+export interface SnapshotSummary {
+  id: string;
+  name: string;
+  trigger: string;
+  createdAt?: Date;
+}
+
 export interface DocumentWithSections {
   document: Document;
   sections: Section[];
@@ -140,7 +156,11 @@ export class DocumentService {
   /** FR-EXP-04/05: kicks off an export job. The pipeline currently runs
    * synchronously server-side, but the job/poll shape matches the async
    * contract so a real queue can land later without a client change. */
-  async exportDocument(documentId: string, format: 'docx' | 'docx+pdf'): Promise<string> {
+  async exportDocument(
+    documentId: string,
+    format: 'docx' | 'docx+pdf',
+    tableContinuation: TableContinuation = 'repeat_header'
+  ): Promise<string> {
     const resp = await this.auth.callWithAuthRetry(
       () =>
         this.client.exportDocument({
@@ -148,7 +168,7 @@ export class DocumentService {
           options: {
             format,
             suggestionsStrategy: 'clean',
-            tableContinuation: 'repeat_header',
+            tableContinuation,
             includeComments: false,
           },
         }).response
@@ -159,6 +179,45 @@ export class DocumentService {
   async getExportJob(jobId: string): Promise<ExportJobStatus> {
     return this.auth.callWithAuthRetry(() => this.client.getExportJob({ jobId }).response);
   }
+
+  /** FR-EDT-10: a named manual snapshot. Automatic ones (pre-export,
+   * pre-bulk-accept, hourly) are taken server-side. */
+  async createSnapshot(documentId: string, name: string): Promise<SnapshotSummary> {
+    const resp = await this.auth.callWithAuthRetry(
+      () => this.client.createSnapshot({ documentId, name }).response
+    );
+    if (!resp.snapshot) throw new Error('createSnapshot: empty response');
+    return toSnapshotSummary(resp.snapshot);
+  }
+
+  async listSnapshots(documentId: string): Promise<SnapshotSummary[]> {
+    const resp = await this.auth.callWithAuthRetry(
+      () => this.client.listSnapshots({ documentId }).response
+    );
+    return resp.snapshots.map(toSnapshotSummary);
+  }
+
+  /** Restoring snapshots the current state first, so it is itself undoable
+   * (FR-EDT-10). Returns the restored document with its sections. */
+  async restoreSnapshot(documentId: string, snapshotId: string): Promise<void> {
+    await this.auth.callWithAuthRetry(
+      () => this.client.restoreSnapshot({ documentId, snapshotId }).response
+    );
+  }
+}
+
+function toSnapshotSummary(snapshot: {
+  id: string;
+  name: string;
+  trigger: string;
+  createdAt?: { seconds: bigint };
+}): SnapshotSummary {
+  return {
+    id: snapshot.id,
+    name: snapshot.name,
+    trigger: snapshot.trigger,
+    createdAt: snapshot.createdAt ? new Date(Number(snapshot.createdAt.seconds) * 1000) : undefined,
+  };
 }
 
 function toSummary(doc: {

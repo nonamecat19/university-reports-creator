@@ -1,22 +1,18 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { computed, Injectable, signal } from '@angular/core';
+import { FindingCategory, FindingSeverity, GrammarTier, TransformKind } from '@gen/ai/ai';
 import { AIServiceClient } from '@gen/ai/ai.client';
 import { RpcError } from '@protobuf-ts/runtime-rpc';
-import {
-  FindingSeverity,
-  FindingCategory,
-  GrammarTier,
-} from '@gen/ai/ai';
+import { grpcTransport } from '../../core/grpc/transport';
 import type {
-  AIGenerationRequest,
   AIAnalysisFinding,
+  AIGenerationRequest,
   AIGrammarSuggestion,
-  AISourceSuggestion,
+  AIPingResult,
   AIReferenceParseResult,
   AIRun,
-  AIPingResult,
+  AISourceSuggestion,
 } from '../../shared/models/ai.model';
-import { AIAction } from '../../shared/models/ai.model';
-import { grpcTransport } from '../../core/grpc/transport';
+import { AIAction, type AIStatus } from '../../shared/models/ai.model';
 
 const SEVERITY_MAP: Record<FindingSeverity, AIAnalysisFinding['severity']> = {
   [FindingSeverity.UNSPECIFIED]: 'info',
@@ -34,6 +30,15 @@ const CATEGORY_MAP: Record<FindingCategory, AIAnalysisFinding['category']> = {
   [FindingCategory.FORMATTING]: 'formatting',
 };
 
+/** Which run label a transform shows up under in the AI tab's history. */
+const TRANSFORM_ACTIONS: Partial<Record<TransformKind, AIAction>> = {
+  [TransformKind.REPHRASE]: AIAction.REPHRASE,
+  [TransformKind.EXPAND]: AIAction.EXPAND,
+  [TransformKind.CONDENSE]: AIAction.CONDENSE,
+  [TransformKind.TRANSLATE]: AIAction.TRANSLATE,
+  [TransformKind.ACADEMIC]: AIAction.REPHRASE,
+};
+
 const TIER_MAP: Record<GrammarTier, AIGrammarSuggestion['tier']> = {
   [GrammarTier.UNSPECIFIED]: 'language_tool',
   [GrammarTier.LANGUAGE_TOOL]: 'language_tool',
@@ -43,15 +48,16 @@ const TIER_MAP: Record<GrammarTier, AIGrammarSuggestion['tier']> = {
 function formatFindings(findings: AIAnalysisFinding[]): string {
   if (findings.length === 0) return 'No issues found.';
   return findings
-    .map((f) => `[${f.severity}] ${f.category}: ${f.message}${f.anchorText ? ` — "${f.anchorText}"` : ''}`)
+    .map(
+      (f) =>
+        `[${f.severity}] ${f.category}: ${f.message}${f.anchorText ? ` — "${f.anchorText}"` : ''}`
+    )
     .join('\n');
 }
 
 function formatGrammarSuggestions(suggestions: AIGrammarSuggestion[]): string {
   if (suggestions.length === 0) return 'No grammar issues found.';
-  return suggestions
-    .map((s) => `"${s.original}" → "${s.replacement}" — ${s.message}`)
-    .join('\n');
+  return suggestions.map((s) => `"${s.original}" → "${s.replacement}" — ${s.message}`).join('\n');
 }
 
 /**
@@ -431,6 +437,146 @@ export class AiService {
         )
       );
       throw error;
+    }
+  }
+
+  /**
+   * Rewrite a selection (FR-AI-06). Streams like generateStream, and — like
+   * every AI action — returns the proposal; nothing is applied to the document
+   * until the user accepts it in the diff preview.
+   */
+  async transformSelection(request: {
+    text: string;
+    transform: TransformKind;
+    targetLanguage?: string;
+    topic?: string;
+    reportType?: string;
+    sessionId?: string;
+  }): Promise<string> {
+    return this.streamRun(
+      TRANSFORM_ACTIONS[request.transform] ?? AIAction.REPHRASE,
+      request.text,
+      (signal) =>
+        this.client.transformSelection(
+          {
+            userId: '',
+            sessionId: request.sessionId ?? '',
+            text: request.text,
+            transform: request.transform,
+            targetLanguage: request.targetLanguage ?? '',
+            topic: request.topic ?? '',
+            reportType: request.reportType ?? '',
+          },
+          { abort: signal }
+        )
+    );
+  }
+
+  /** Continue writing from the cursor (FR-AI-06). */
+  async continueWriting(request: {
+    precedingText: string;
+    topic?: string;
+    reportType?: string;
+    sectionTitle?: string;
+    maxTokens?: number;
+    sessionId?: string;
+  }): Promise<string> {
+    return this.streamRun(AIAction.CONTINUE, request.precedingText, (signal) =>
+      this.client.continueWriting(
+        {
+          userId: '',
+          sessionId: request.sessionId ?? '',
+          precedingText: request.precedingText,
+          topic: request.topic ?? '',
+          reportType: request.reportType ?? '',
+          sectionTitle: request.sectionTitle ?? '',
+          maxTokens: request.maxTokens ?? 0,
+        },
+        { abort: signal }
+      )
+    );
+  }
+
+  /**
+   * Whether AI is available at all, which provider is answering, and whether
+   * it runs locally (FR-AI-04: a cloud provider needs a consent notice; a
+   * local one does not). Returns a disabled status rather than throwing, so a
+   * stack deployed without AI simply hides the tab.
+   */
+  async status(): Promise<AIStatus> {
+    try {
+      const resp = await this.client.getAIStatus({}).response;
+      return {
+        enabled: resp.enabled,
+        provider: resp.provider,
+        model: resp.model,
+        localProvider: resp.localProvider,
+        grammarAvailable: resp.grammarAvailable,
+        maxConcurrentPerUser: resp.maxConcurrentPerUser,
+        maxRequestsPerMinute: resp.maxRequestsPerMinute,
+      };
+    } catch {
+      return {
+        enabled: false,
+        provider: 'unknown',
+        model: 'unknown',
+        localProvider: false,
+        grammarAvailable: false,
+        maxConcurrentPerUser: 0,
+        maxRequestsPerMinute: 0,
+      };
+    }
+  }
+
+  /** Shared plumbing for the streaming actions: one run record, chunk
+   * accumulation, cancellation, and terminal status. */
+  private async streamRun(
+    action: AIAction,
+    prompt: string,
+    start: (signal: AbortSignal) => { responses: AsyncIterable<{ delta: string; done: boolean }> }
+  ): Promise<string> {
+    const runId = crypto.randomUUID();
+    this._runs.update((runs) => [
+      { id: runId, action, status: 'running', prompt, output: '', startedAt: new Date() },
+      ...runs,
+    ]);
+    this._isStreaming.set(true);
+
+    const controller = new AbortController();
+    this._abortController.set(controller);
+
+    try {
+      let output = '';
+      for await (const chunk of start(controller.signal).responses) {
+        output += chunk.delta;
+        this._runs.update((runs) => runs.map((r) => (r.id === runId ? { ...r, output } : r)));
+        if (chunk.done) break;
+      }
+      this._runs.update((runs) =>
+        runs.map((r) =>
+          r.id === runId ? { ...r, status: 'completed', completedAt: new Date(), output } : r
+        )
+      );
+      return output;
+    } catch (error: any) {
+      const cancelled = error instanceof RpcError && error.code === 'CANCELLED';
+      this._runs.update((runs) =>
+        runs.map((r) =>
+          r.id === runId
+            ? {
+                ...r,
+                status: cancelled ? 'cancelled' : 'error',
+                error: cancelled ? undefined : error.message,
+                completedAt: new Date(),
+              }
+            : r
+        )
+      );
+      if (cancelled) return '';
+      throw error;
+    } finally {
+      this._isStreaming.set(false);
+      this._abortController.set(null);
     }
   }
 

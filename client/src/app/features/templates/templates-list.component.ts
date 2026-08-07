@@ -9,7 +9,7 @@ import { Dialog } from 'primeng/dialog';
 import { InputText } from 'primeng/inputtext';
 import { Select } from 'primeng/select';
 import { Tag } from 'primeng/tag';
-import { FileService } from '../../core/services/file.service';
+import { FileService, Purpose } from '../../core/services/file.service';
 import { getReportTypeLabel, getReportTypeSeverity } from '../../shared/models/template.model';
 import { TemplateService } from './template.service';
 
@@ -376,7 +376,7 @@ export class TemplatesListComponent implements OnInit {
     this.uploading.set(true);
     this.uploadError.set(null);
     try {
-      const uploaded = await this.fileService.upload(file);
+      const uploaded = await this.fileService.upload(file, Purpose.TEMPLATES);
       const { template } = await this.templateService.create(
         this.newName,
         this.newDescription,

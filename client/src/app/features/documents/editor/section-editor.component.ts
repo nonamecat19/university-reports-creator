@@ -11,8 +11,9 @@ import {
   ViewChild,
 } from '@angular/core';
 import { Editor } from '@tiptap/core';
-import { FileService } from '../../../core/services/file.service';
+import { FileService, Purpose } from '../../../core/services/file.service';
 import { citationNumbersPluginKey } from './schema/citation.extension';
+import { referenceLabelsPluginKey } from './schema/cross-reference.extension';
 import { buildSectionExtensions } from './schema/extensions';
 import { numberingPluginKey } from './schema/numbering.extension';
 import {
@@ -52,8 +53,11 @@ const AUTOSAVE_DEBOUNCE_MS = 2000;
         <span class="tb-sep"></span>
         <button type="button" class="tb-btn" (click)="insertTable()" title="Вставити таблицю"><i class="pi pi-table"></i></button>
         <button type="button" class="tb-btn" (click)="triggerImagePick()" title="Вставити зображення"><i class="pi pi-image"></i></button>
+        <button type="button" class="tb-btn" (click)="insertFormulaBlock()" title="Вставити формулу (нумерована, окремим рядком)"><i class="pi pi-percentage"></i></button>
+        <button type="button" class="tb-btn" (click)="insertFormulaInline()" title="Вставити формулу в рядок тексту">f(x)</button>
         <button type="button" class="tb-btn" (click)="editor.chain().focus().setHorizontalRule().run()" title="Розрив сторінки"><i class="pi pi-file"></i></button>
         <button type="button" class="tb-btn" (click)="requestCitation.emit()" title="Вставити посилання на джерело (Ctrl+Shift+C)"><i class="pi pi-bookmark"></i></button>
+        <button type="button" class="tb-btn" (click)="requestCrossReference.emit()" title="Вставити перехресне посилання (рис./табл./розділ)"><i class="pi pi-link"></i></button>
         <span class="tb-sep"></span>
         <button type="button" class="tb-btn" (click)="editor.chain().focus().undo().run()" title="Скасувати (Ctrl+Z)"><i class="pi pi-undo"></i></button>
         <button type="button" class="tb-btn" (click)="editor.chain().focus().redo().run()" title="Повторити (Ctrl+Y)"><i class="pi pi-refresh"></i></button>
@@ -135,9 +139,14 @@ const AUTOSAVE_DEBOUNCE_MS = 2000;
       color: var(--p-primary-700, #1d4ed8);
       cursor: default;
     }
-    .editor-surface :global(.citation-orphan) {
+    .editor-surface :global(.citation-orphan),
+    .editor-surface :global(.reference-orphan) {
       color: var(--p-red-500, #ef4444);
       text-decoration: underline wavy;
+    }
+    .editor-surface :global(.reference-label) {
+      color: var(--p-primary-700, #1d4ed8);
+      cursor: default;
     }
     .editor-surface :global(.doc-number) {
       color: var(--p-text-muted-color, #6b7280);
@@ -150,6 +159,48 @@ const AUTOSAVE_DEBOUNCE_MS = 2000;
       font-weight: 400;
       font-size: 0.9em;
       margin: 0.25rem 0 0.75rem;
+    }
+    /* Display formula: centred on its line with the number right-aligned on
+       the same line (ДСТУ 3008:2015). The number comes from the numbering
+       decoration as a data attribute, so it is never part of the content. */
+    .editor-surface :global(.formula-block) {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      margin: 0.75rem 0;
+      cursor: pointer;
+    }
+    .editor-surface :global(.formula-block) > :global(.formula-render) {
+      grid-column: 1;
+      text-align: center;
+    }
+    .editor-surface :global(.formula-block)::after {
+      content: attr(data-number);
+      grid-column: 2;
+      color: var(--p-text-muted-color, #6b7280);
+      white-space: nowrap;
+      padding-left: 1rem;
+    }
+    .editor-surface :global(.formula-block.formula-editing) > :global(.formula-source) {
+      grid-column: 1 / -1;
+    }
+    .editor-surface :global(.formula-inline) {
+      cursor: pointer;
+    }
+    .editor-surface :global(.formula-empty) {
+      color: var(--p-text-muted-color, #6b7280);
+      font-style: italic;
+    }
+    .editor-surface :global(.formula-source) {
+      display: block;
+      width: 100%;
+      margin-top: 0.35rem;
+      padding: 0.35rem 0.5rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      border: 1px solid var(--p-primary-300, #93b4fd);
+      border-radius: 6px;
+      resize: vertical;
     }
     .editor-surface :global(table) {
       border-collapse: collapse;
@@ -170,6 +221,8 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
   @Input() numberingMap: Map<string, string> = new Map();
   /** sourceId -> reference-list number, for citation decorations (FR-BIB-05). */
   @Input() citationNumbers: Map<string, number> = new Map();
+  /** targetId -> rendered cross-reference label, e.g. «рис. 2.1» (FR-EDT-07). */
+  @Input() referenceLabels: Map<string, string> = new Map();
   /** In suggest mode every edit becomes a suggestion (FR-REV-09). */
   @Input() suggestMode = false;
   /** Author stamped on suggestion marks. */
@@ -184,6 +237,9 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
   /** The user asked to cite a source; the parent opens the picker and calls
    * back into insertCitation() on this instance. */
   @Output() requestCitation = new EventEmitter<void>();
+  /** The user asked to insert a cross-reference; the parent opens the target
+   * picker and calls back into insertCrossReference() on this instance. */
+  @Output() requestCrossReference = new EventEmitter<void>();
   /** Fired when this editor takes focus, so the parent knows which section a
    * panel action (cite, AI insert) applies to. */
   @Output() focused = new EventEmitter<void>();
@@ -205,6 +261,9 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
     }
     if (changes['citationNumbers'] && this.editor) {
       this.pushCitationNumbers();
+    }
+    if (changes['referenceLabels'] && this.editor) {
+      this.pushReferenceLabels();
     }
     if ((changes['suggestMode'] || changes['authorId']) && this.editor) {
       this.pushSuggestMode();
@@ -231,6 +290,7 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
     });
     this.pushNumbering();
     this.pushCitationNumbers();
+    this.pushReferenceLabels();
     this.pushSuggestMode();
   }
 
@@ -289,9 +349,21 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
     this.editor.chain().focus().insertCitation({ sourceId, locator }).run();
   }
 
+  /** Inserts a cross-reference at the cursor (FR-EDT-04). Like citations, only
+   * the target id is stored — number and wording are resolved live. */
+  insertCrossReference(targetId: string): void {
+    this.editor.chain().focus().insertCrossReference({ targetId }).run();
+  }
+
   private pushCitationNumbers(): void {
     if (!this.editor) return;
     const tr = this.editor.state.tr.setMeta(citationNumbersPluginKey, this.citationNumbers);
+    this.editor.view.dispatch(tr);
+  }
+
+  private pushReferenceLabels(): void {
+    if (!this.editor) return;
+    const tr = this.editor.state.tr.setMeta(referenceLabelsPluginKey, this.referenceLabels);
     this.editor.view.dispatch(tr);
   }
 
@@ -305,7 +377,16 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
     this.saveTimer = setTimeout(() => this.flushNow(), AUTOSAVE_DEBOUNCE_MS);
   }
 
-  /** Forces an immediate save (Ctrl+S) rather than waiting for the debounce. */
+  /** Drops the pending debounced save without emitting — for when the parent
+   * is about to persist this section's content itself and wants to await it. */
+  cancelPendingSave(): void {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+  }
+
+  /** Forces an immediate save rather than waiting for the debounce. */
   flushNow(): void {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
@@ -340,6 +421,16 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
     this.editor.chain().focus().toggleHeading({ level }).run();
   }
 
+  /** A display formula is inserted empty; the node view opens its LaTeX box on
+   * click, so the student types the source where they see the result. */
+  insertFormulaBlock(): void {
+    this.editor.chain().focus().insertFormulaBlock().run();
+  }
+
+  insertFormulaInline(): void {
+    this.editor.chain().focus().insertFormulaInline().run();
+  }
+
   insertTable(): void {
     this.editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
   }
@@ -356,7 +447,7 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
 
     const localUrl = URL.createObjectURL(file);
     const naturalSize = await readImageSize(file);
-    const { id: objectKey } = await this.fileService.upload(file);
+    const { id: objectKey } = await this.fileService.upload(file, Purpose.IMAGES);
 
     this.editor
       .chain()

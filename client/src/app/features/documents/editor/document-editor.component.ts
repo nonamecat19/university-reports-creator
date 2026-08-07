@@ -1,6 +1,8 @@
 import { CdkDrag, type CdkDragDrop, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
+import { DatePipe } from '@angular/common';
 import {
   Component,
+  HostListener,
   Input,
   inject,
   type OnInit,
@@ -24,16 +26,26 @@ import {
   type ExportJobStatus,
   type Section,
   SectionKind,
+  type SnapshotSummary,
+  type TableContinuation,
 } from '../../../core/services/document.service';
 import { FileService } from '../../../core/services/file.service';
-import { ReviewService, Role } from '../../../core/services/review.service';
+import { ReviewService } from '../../../core/services/review.service';
 import { SourceService } from '../../../core/services/source.service';
 import { AiTabComponent } from '../../ai/ai-tab.component';
 import { ReviewPanelComponent, type SuggestionResolution } from '../review/review-panel.component';
 import { ShareDialogComponent } from '../review/share-dialog.component';
 import { SourcesPanelComponent } from '../sources/sources-panel.component';
 import { hydrateImages, parseSectionContent } from './document-content.util';
-import { captionText, computeNumbering, type PMNode } from './numbering';
+import {
+  captionText,
+  collectReferenceTargets,
+  computeNumbering,
+  type NumberingInput,
+  type PMNode,
+  type ReferenceTarget,
+  referenceLabels,
+} from './numbering';
 import {
   collectSuggestionIds,
   resolveAllSuggestionsInDoc,
@@ -62,6 +74,7 @@ const METADATA_DEBOUNCE_MS = 2000;
   selector: 'app-document-editor',
   standalone: true,
   imports: [
+    DatePipe,
     FormsModule,
     TranslatePipe,
     Button,
@@ -123,6 +136,13 @@ const METADATA_DEBOUNCE_MS = 2000;
                   <span class="status status-saved">{{ 'editor.status.saved' | translate }}</span>
                 }
                 <p-button
+                  [label]="'editor.versions' | translate"
+                  icon="pi pi-history"
+                  size="small"
+                  severity="secondary"
+                  (onClick)="$event.stopPropagation(); openVersionsDialog()"
+                />
+                <p-button
                   [label]="'editor.export' | translate"
                   icon="pi pi-file-export"
                   size="small"
@@ -178,6 +198,7 @@ const METADATA_DEBOUNCE_MS = 2000;
                   [initialContent]="sectionContent()[section.id]"
                   [numberingMap]="numbering().blockNumbers"
                   [citationNumbers]="sourceService.citationNumbers()"
+                  [referenceLabels]="referenceLabels()"
                   [suggestMode]="suggestMode()"
                   [authorId]="currentUserId()"
                   [editable]="review.canComment()"
@@ -185,6 +206,7 @@ const METADATA_DEBOUNCE_MS = 2000;
                   (save)="onSectionSave(section.id, $event)"
                   (focused)="activeSectionId.set(section.id)"
                   (requestCitation)="focusSourcesPanel(section.id)"
+                  (requestCrossReference)="openCrossReferencePicker(section.id)"
                 />
               }
             </section>
@@ -264,6 +286,62 @@ const METADATA_DEBOUNCE_MS = 2000;
       </div>
     </p-dialog>
 
+    <p-dialog [header]="'editor.versions_dialog' | translate" [(visible)]="versionsVisible" [modal]="true" [style]="{ width: '34rem' }">
+      <div class="version-create">
+        <input pInputText type="text" [(ngModel)]="newVersionName" [placeholder]="'editor.version_name_placeholder' | translate" class="w-full" />
+        <p-button [label]="'editor.save_version' | translate" [loading]="savingVersion()" (onClick)="saveVersion()" />
+      </div>
+      @if (versions().length === 0) {
+        <p class="state-message">{{ 'editor.versions_empty' | translate }}</p>
+      } @else {
+        <ul class="version-list">
+          @for (version of versions(); track version.id) {
+            <li class="version-item">
+              <div class="version-meta">
+                <span class="version-name">{{ version.name || ('editor.version_trigger.' + version.trigger | translate) }}</span>
+                <span class="version-sub">
+                  {{ 'editor.version_trigger.' + version.trigger | translate }}
+                  @if (version.createdAt) {
+                    · {{ version.createdAt | date: 'dd.MM.yyyy HH:mm' }}
+                  }
+                </span>
+              </div>
+              <p-button
+                [label]="'editor.restore_version' | translate"
+                size="small"
+                severity="secondary"
+                [loading]="restoringVersionId() === version.id"
+                (onClick)="restoreVersion(version)"
+              />
+            </li>
+          }
+        </ul>
+      }
+      <div class="dialog-actions">
+        <p-button label="{{ 'common.cancel' | translate }}" severity="secondary" (onClick)="versionsVisible.set(false)" />
+      </div>
+    </p-dialog>
+
+    <p-dialog [header]="'editor.cross_reference_dialog' | translate" [(visible)]="crossRefVisible" [modal]="true" [style]="{ width: '32rem' }">
+      @if (crossRefTargets().length === 0) {
+        <p class="state-message">{{ 'editor.cross_reference_empty' | translate }}</p>
+      } @else {
+        <ul class="reference-target-list">
+          @for (target of crossRefTargets(); track target.id) {
+            <li>
+              <button type="button" class="reference-target" (click)="insertCrossReference(target.id)">
+                <span class="reference-target-label">{{ target.label }}</span>
+                <span class="reference-target-description">{{ target.description }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+      <div class="dialog-actions">
+        <p-button label="{{ 'common.cancel' | translate }}" severity="secondary" (onClick)="crossRefVisible.set(false)" />
+      </div>
+    </p-dialog>
+
     <p-dialog [header]="'editor.export_dialog' | translate" [(visible)]="exportVisible" [modal]="true" [style]="{ width: '28rem' }">
       @if (!exportJob()) {
         <div class="field">
@@ -276,6 +354,20 @@ const METADATA_DEBOUNCE_MS = 2000;
             [(ngModel)]="exportFormat"
             class="w-full"
           />
+        </div>
+        <div class="field">
+          <label for="export-table-continuation">{{ 'editor.table_continuation_label' | translate }}</label>
+          <p-select
+            id="export-table-continuation"
+            [options]="tableContinuationOptions"
+            optionLabel="label"
+            optionValue="value"
+            [(ngModel)]="tableContinuation"
+            class="w-full"
+          />
+          @if (tableContinuation === 'continuation_caption') {
+            <small class="field-hint">{{ 'editor.table_continuation_hint' | translate }}</small>
+          }
         </div>
         <div class="dialog-actions">
           <p-button label="{{ 'common.cancel' | translate }}" severity="secondary" (onClick)="exportVisible.set(false)" />
@@ -434,6 +526,10 @@ const METADATA_DEBOUNCE_MS = 2000;
       font-size: 0.8rem;
       color: var(--p-text-muted-color, #6b7280);
     }
+    .field-hint {
+      font-size: 0.75rem;
+      color: var(--p-yellow-600, #ca8a04);
+    }
     .section-block {
       scroll-margin-top: 1rem;
     }
@@ -473,10 +569,79 @@ const METADATA_DEBOUNCE_MS = 2000;
       gap: 0.5rem;
       margin-top: 1rem;
     }
-    .artifact-list {
+    .artifact-list, .reference-target-list {
       list-style: none;
       padding: 0;
       margin: 0.5rem 0;
+    }
+    .reference-target-list {
+      max-height: 22rem;
+      overflow-y: auto;
+    }
+    .version-create {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .version-create input {
+      flex: 1;
+    }
+    .version-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      max-height: 22rem;
+      overflow-y: auto;
+    }
+    .version-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--p-content-border-color, #dcdfe4);
+    }
+    .version-meta {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .version-name {
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .version-sub {
+      font-size: 0.75rem;
+      color: var(--p-text-muted-color, #6b7280);
+    }
+    .reference-target {
+      display: flex;
+      gap: 0.6rem;
+      width: 100%;
+      padding: 0.45rem 0.5rem;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      color: inherit;
+      font-size: 0.85rem;
+    }
+    .reference-target:hover {
+      background: var(--p-surface-100, #f1f3f6);
+    }
+    .reference-target-label {
+      font-weight: 600;
+      white-space: nowrap;
+      color: var(--p-primary-700, #1d4ed8);
+    }
+    .reference-target-description {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--p-text-muted-color, #6b7280);
     }
     .artifact-list li {
       padding: 0.4rem 0;
@@ -508,6 +673,14 @@ export class DocumentEditorComponent implements OnInit {
   readonly sections = signal<Section[]>([]);
   readonly sectionContent = signal<Record<string, object>>({});
   readonly numbering = signal(computeNumbering([]));
+  /** targetId -> «рис. 2.1», recomputed with the numbering (FR-EDT-07). */
+  readonly referenceLabels = signal(new Map<string, string>());
+  readonly crossRefVisible = signal(false);
+  readonly crossRefTargets = signal<ReferenceTarget[]>([]);
+  readonly versionsVisible = signal(false);
+  readonly versions = signal<SnapshotSummary[]>([]);
+  readonly savingVersion = signal(false);
+  readonly restoringVersionId = signal('');
   readonly metadataValues = signal<Record<string, string>>({});
   readonly metadataOpen = signal(true);
   readonly metadataStatus = signal<SaveStatus>('saved');
@@ -537,11 +710,26 @@ export class DocumentEditorComponent implements OnInit {
     { label: this.translate.instant('editor.export_format_docx'), value: 'docx' as const },
     { label: this.translate.instant('editor.export_format_docx_pdf'), value: 'docx+pdf' as const },
   ];
+  protected readonly tableContinuationOptions = [
+    {
+      label: this.translate.instant('editor.table_continuation_repeat_header'),
+      value: 'repeat_header' as const,
+    },
+    {
+      label: this.translate.instant('editor.table_continuation_caption'),
+      value: 'continuation_caption' as const,
+    },
+  ];
   protected exportFormat: 'docx' | 'docx+pdf' = 'docx+pdf';
+  protected tableContinuation: TableContinuation = 'repeat_header';
+  protected newVersionName = '';
   protected newSectionTitle = '';
   protected newSectionKind: SectionKind = SectionKind.CHAPTER;
 
   private readonly sectionStatuses = new Map<string, SaveStatus>();
+  /** Sections edited since their last successful save — what a forced flush
+   * (Ctrl+S / snapshot) has to persist. */
+  private readonly dirtySections = new Set<string>();
   private readonly liveSectionContent = new Map<string, PMNode>();
   private metadataTimer: ReturnType<typeof setTimeout> | null = null;
   private metadataDirty: Record<string, string> | null = null;
@@ -597,14 +785,20 @@ export class DocumentEditorComponent implements OnInit {
     this.scheduleMetadataSave(values);
   }
 
-  private recomputeNumbering(): void {
-    const input = this.sections().map((s) => ({
+  private numberingInput(): NumberingInput[] {
+    return this.sections().map((s) => ({
       id: s.id,
       kind: s.kind === SectionKind.APPENDIX ? ('appendix' as const) : ('chapter' as const),
       order: s.order,
+      title: s.title,
       content: this.liveSectionContent.get(s.id) ?? null,
     }));
-    this.numbering.set(computeNumbering(input));
+  }
+
+  private recomputeNumbering(): void {
+    const result = computeNumbering(this.numberingInput());
+    this.numbering.set(result);
+    this.referenceLabels.set(referenceLabels(result));
   }
 
   sectionLabel(section: Section): string {
@@ -646,6 +840,7 @@ export class DocumentEditorComponent implements OnInit {
 
   onSectionDirty(sectionId: string, json: PMNode): void {
     this.liveSectionContent.set(sectionId, json);
+    this.dirtySections.add(sectionId);
     this.recomputeNumbering();
   }
 
@@ -757,6 +952,83 @@ export class DocumentEditorComponent implements OnInit {
     await this.sourceService.refreshBibliography();
   }
 
+  /** Version browser (FR-EDT-10). Snapshots are full copies server-side, so
+   * restoring is a server call and the editor simply reloads afterwards. */
+  async openVersionsDialog(): Promise<void> {
+    this.newVersionName = '';
+    this.versionsVisible.set(true);
+    this.versions.set(await this.documentService.listSnapshots(this.id));
+  }
+
+  async saveVersion(): Promise<void> {
+    this.savingVersion.set(true);
+    try {
+      // Pending edits must reach the server first, or the snapshot captures the
+      // last autosave rather than what the student sees.
+      await this.flushDirtySections();
+      await this.documentService.createSnapshot(this.id, this.newVersionName.trim());
+      this.newVersionName = '';
+      this.versions.set(await this.documentService.listSnapshots(this.id));
+    } finally {
+      this.savingVersion.set(false);
+    }
+  }
+
+  async restoreVersion(version: SnapshotSummary): Promise<void> {
+    const label =
+      version.name || this.translate.instant(`editor.version_trigger.${version.trigger}`);
+    if (!window.confirm(this.translate.instant('editor.restore_confirm', { name: label }))) return;
+
+    this.restoringVersionId.set(version.id);
+    try {
+      await this.documentService.restoreSnapshot(this.id, version.id);
+      this.versionsVisible.set(false);
+      await this.load();
+    } finally {
+      this.restoringVersionId.set('');
+    }
+  }
+
+  /** Ctrl+S forces a snapshot rather than a save — saves are automatic
+   * (FR-EDT-09), versions are the thing a student explicitly wants to keep. */
+  @HostListener('document:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') return;
+    event.preventDefault();
+    void this.saveVersion();
+  }
+
+  /** Persists every section with unsaved edits and waits for it, so a snapshot
+   * taken right after captures what the student sees rather than the last
+   * autosave. */
+  private async flushDirtySections(): Promise<void> {
+    for (const editor of this.sectionEditors?.toArray() ?? []) editor.cancelPendingSave();
+
+    const pending = [...this.dirtySections];
+    await Promise.all(
+      pending.map((sectionId) => {
+        const content = this.liveSectionContent.get(sectionId);
+        return content ? this.onSectionSave(sectionId, content) : Promise.resolve();
+      })
+    );
+  }
+
+  /** Toolbar "cross-reference" button: targets are everything the document
+   * currently numbers, so the picker is always in sync with the counters. */
+  openCrossReferencePicker(sectionId: string): void {
+    this.activeSectionId.set(sectionId);
+    this.crossRefTargets.set(collectReferenceTargets(this.numberingInput(), this.numbering()));
+    this.crossRefVisible.set(true);
+  }
+
+  insertCrossReference(targetId: string): void {
+    this.crossRefVisible.set(false);
+    const target = this.activeSectionEditor();
+    if (!target) return;
+    target.insertCrossReference(targetId);
+    target.flushNow();
+  }
+
   async onSectionSave(sectionId: string, json: object): Promise<void> {
     const section = this.sections().find((s) => s.id === sectionId);
     if (!section) return;
@@ -770,6 +1042,7 @@ export class DocumentEditorComponent implements OnInit {
       );
       this.sections.set(this.sections().map((s) => (s.id === sectionId ? updated : s)));
       this.sectionStatuses.set(sectionId, 'saved');
+      this.dirtySections.delete(sectionId);
 
       // FR-REV-11: content is the source of truth for suggestions; the
       // registry is reconciled from the ids the saved content actually holds.
@@ -895,7 +1168,11 @@ export class DocumentEditorComponent implements OnInit {
   async startExport(): Promise<void> {
     this.exporting.set(true);
     try {
-      const jobId = await this.documentService.exportDocument(this.id, this.exportFormat);
+      const jobId = await this.documentService.exportDocument(
+        this.id,
+        this.exportFormat,
+        this.tableContinuation
+      );
       const job = await this.documentService.getExportJob(jobId);
       this.exportJob.set(job);
     } catch (error) {

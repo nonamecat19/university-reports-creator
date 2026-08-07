@@ -117,3 +117,21 @@ export const AI_ACTION_ICONS: Record<AIAction, string> = {
   [AIAction.SOURCES]: 'pi pi-book',
   [AIAction.PARSE_REFERENCE]: 'pi pi-list',
 };
+
+/**
+ * What the AI tab needs to render itself honestly (FR-AI-04, FR-AI-05):
+ * whether AI exists at all in this deployment, who is answering, and whether
+ * document text stays on our own hardware.
+ */
+export interface AIStatus {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  /** True for a provider running on our own hardware (ollama) — no cloud
+   * consent notice needed. */
+  localProvider: boolean;
+  /** Tier-1 (LanguageTool) availability; style-only checking when false. */
+  grammarAvailable: boolean;
+  maxConcurrentPerUser: number;
+  maxRequestsPerMinute: number;
+}

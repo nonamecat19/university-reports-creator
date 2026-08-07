@@ -157,6 +157,36 @@ export class ReviewService {
     await this.loadComments();
   }
 
+  /**
+   * Replaces the previous analysis run's AI comments with this run's findings
+   * (FR-AI-09). Re-running analysis must not pile up duplicates, so the server
+   * keeps findings it already has, adds the new ones, and resolves the ones
+   * this run no longer reports.
+   */
+  async syncAiComments(
+    findings: Array<{
+      sectionId: string;
+      aiCategory: string;
+      body: string;
+      anchor?: CommentAnchor;
+    }>
+  ): Promise<{ created: number; kept: number; resolved: number }> {
+    const resp = await this.auth.callWithAuthRetry(
+      () =>
+        this.client.syncAiComments({
+          documentId: this._documentId(),
+          findings: findings.map((f) => ({
+            sectionId: f.sectionId,
+            aiCategory: f.aiCategory,
+            body: f.body,
+            anchor: f.anchor,
+          })),
+        }).response
+    );
+    await this.loadComments();
+    return { created: resp.created.length, kept: resp.kept, resolved: resp.resolved };
+  }
+
   async reply(threadRootId: string, body: string): Promise<void> {
     await this.auth.callWithAuthRetry(
       () =>
