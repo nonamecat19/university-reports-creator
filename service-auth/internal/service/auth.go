@@ -243,7 +243,7 @@ func (s *AuthService) LoginWithGoogle(ctx context.Context, req *pb.LoginWithGoog
 // familyID is empty a new rotation family starts (login); otherwise the new
 // token continues the existing family (refresh).
 func (s *AuthService) issueTokenPair(ctx context.Context, user *model.User, familyID string) (*pb.LoginResponse, error) {
-	accessToken, err := s.tokens.GenerateAccessToken(user.ID, user.Email)
+	accessToken, err := s.tokens.GenerateAccessToken(user.ID, user.Email, user.Name)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to generate access token")
 	}

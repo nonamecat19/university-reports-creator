@@ -26,8 +26,8 @@ func NewJWTManager(priv *rsa.PrivateKey, pub *rsa.PublicKey, accessDur time.Dura
 	}
 }
 
-func (m *JWTManager) GenerateAccessToken(userID, email string) (string, error) {
-	return jwtauth.Sign(m.privateKey, uuid.NewString(), userID, email, m.accessTokenDuration)
+func (m *JWTManager) GenerateAccessToken(userID, email, name string) (string, error) {
+	return jwtauth.Sign(m.privateKey, uuid.NewString(), userID, email, name, m.accessTokenDuration)
 }
 
 func (m *JWTManager) ValidateToken(tokenStr string) (*jwtauth.Claims, error) {
