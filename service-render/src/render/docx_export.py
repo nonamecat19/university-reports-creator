@@ -29,6 +29,7 @@ from .docx_xml import (
     set_run_marks,
     set_update_fields_on_open,
 )
+from .footnotes import FootnotesBuilder
 from .omml import UnsupportedLatex, latex_to_omml
 from .placeholders import find_placeholders
 from .revisions import CommentsBuilder, RevisionIds, should_emit_text, suggestion_mark, wrap_revision
@@ -79,6 +80,8 @@ class TranslateContext:
     reference_labels: dict[str, str]
     # id(w:tbl element) -> table number, for continuation captions (FR-TBL-09).
     table_numbers: dict[int, str]
+    # Collects footnotes as they are emitted; writes the part at the end.
+    footnotes: FootnotesBuilder
     # Non-fatal export problems surfaced on the job (FR-EXP-05), appended to
     # as nodes are translated.
     warnings: list[dict]
@@ -154,6 +157,10 @@ def _inline_text_runs(paragraph: Paragraph, inline_nodes: list[dict], revisions:
             _emit_formula(paragraph, (node.get("attrs") or {}).get("latex", ""), revisions)
             continue
 
+        if node_type == "footnote":
+            _emit_footnote(paragraph, (node.get("attrs") or {}).get("text", ""), revisions)
+            continue
+
         if node_type != "text":
             continue
 
@@ -212,6 +219,23 @@ def _emit_cross_reference(paragraph: Paragraph, node: dict[str, Any], revisions:
         return
 
     paragraph.add_run(label)
+
+
+def _emit_footnote(paragraph: Paragraph, text: str, revisions: TranslateContext) -> None:
+    """Appends a footnote reference and records the note (FR-EDT-04).
+
+    An empty note is dropped rather than exported: Word would show a bare
+    number pointing at nothing. Export validation already refuses the document
+    in that state, so reaching here means the check was bypassed.
+    """
+    if not text.strip():
+        revisions.warnings.append({
+            "severity": "warning",
+            "message": "empty footnote was not exported",
+            "location": "",
+        })
+        return
+    revisions.footnotes.add(paragraph, text)
 
 
 def _emit_formula(paragraph: Paragraph, latex: str, revisions: TranslateContext) -> None:
@@ -445,6 +469,7 @@ def render_docx(
         citation_numbers={e["source_id"]: e["number"] for e in bibliography_entries if e["source_id"]},
         reference_labels=num.reference_labels(numbering_result),
         table_numbers={},
+        footnotes=FootnotesBuilder(),
         warnings=warnings,
     )
 
@@ -500,6 +525,8 @@ def render_docx(
         for run in list(toc_marker.runs):
             run.text = ""
         insert_toc_field(toc_marker)
+
+    revisions.footnotes.attach(document)
 
     if revisions.comments is not None:
         revisions.comments.attach(document)
