@@ -80,6 +80,9 @@ message RenderOptions {
   // clean | with_track_changes | all_accepted (FR-REV-13)
   string suggestions_strategy = 4;
   bool include_comments = 5;
+  // CSL style id for the reference list; empty = the service default
+  // "dstu-8302-2015" (FR-BIB-11).
+  string citation_style = 6;
 }
 
 message RenderDocxRequest {

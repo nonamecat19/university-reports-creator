@@ -6,34 +6,111 @@ option go_package = "github.com/nnc/university-reports-creator/gen/go/file";
 
 import "google/protobuf/empty.proto";
 
+// Binary storage (FR-API-13). Browsers reach this through the gRPC-web
+// gateway, which supports unary and server-streaming only — hence a unary
+// *chunk session* for upload (Begin/Chunk/Complete) and a server-streaming
+// download, never client streaming.
 service FileService {
+  // ── Upload: unary chunk session (FR-API-13) ──────────────────────────
+  rpc BeginUpload(BeginUploadRequest) returns (BeginUploadResponse);
+  rpc UploadChunk(UploadChunkRequest) returns (UploadChunkResponse);
+  rpc CompleteUpload(CompleteUploadRequest) returns (UploadResponse);
+  rpc AbortUpload(AbortUploadRequest) returns (google.protobuf.Empty);
+
+  // Single-shot upload, kept for server-side callers and small payloads that
+  // fit in one message. Subject to the same per-purpose validation.
   rpc Upload(UploadRequest) returns (UploadResponse);
-  rpc Download(DownloadRequest) returns (DownloadResponse);
+
+  // Server-streaming: the first message carries the metadata, every message
+  // carries a slice of the bytes.
+  rpc Download(DownloadRequest) returns (stream DownloadChunk);
+  // Short-lived presigned URL so binaries don't stream through the gateway.
+  rpc GetDownloadURL(GetDownloadURLRequest) returns (GetDownloadURLResponse);
+
   rpc Delete(DeleteRequest) returns (google.protobuf.Empty);
   rpc List(ListRequest) returns (ListResponse);
+}
+
+// What a file is for. Drives the size cap and the accepted content types
+// (NFR-05) and the key prefix objects are stored under.
+enum Purpose {
+  PURPOSE_UNSPECIFIED = 0;
+  PURPOSE_TEMPLATES = 1;
+  PURPOSE_EXPORTS = 2;
+  PURPOSE_IMAGES = 3;
+}
+
+message BeginUploadRequest {
+  Purpose purpose = 1;
+  string filename = 2;
+  // Declared total size; validated against what actually arrives at complete.
+  int64 size = 3;
+  string content_type = 4;
+}
+
+message BeginUploadResponse {
+  string upload_id = 1;
+  // Largest chunk the server accepts, so the client can size its slices.
+  int32 max_chunk_bytes = 2;
+  // Seconds until an untouched session is discarded.
+  int32 expires_in_seconds = 3;
+}
+
+message UploadChunkRequest {
+  string upload_id = 1;
+  // 0-based, must arrive in order; a repeat of the last seq is ignored so a
+  // retried chunk cannot duplicate data.
+  int32 seq = 2;
+  bytes data = 3;
+}
+
+message UploadChunkResponse {
+  int64 received_bytes = 1;
+  int32 next_seq = 2;
+}
+
+message CompleteUploadRequest {
+  string upload_id = 1;
+}
+
+message AbortUploadRequest {
+  string upload_id = 1;
 }
 
 message UploadRequest {
   string filename = 1;
   string content_type = 2;
   bytes data = 3;
+  Purpose purpose = 4;
 }
 
 message UploadResponse {
   string id = 1;
   string filename = 2;
   int64 size = 3;
+  string content_type = 4;
 }
 
 message DownloadRequest {
   string id = 1;
 }
 
-message DownloadResponse {
+message DownloadChunk {
+  // Set on the first message of the stream only.
   string id = 1;
   string filename = 2;
   string content_type = 3;
-  bytes data = 4;
+  int64 size = 4;
+  bytes data = 5;
+}
+
+message GetDownloadURLRequest {
+  string id = 1;
+}
+
+message GetDownloadURLResponse {
+  string url = 1;
+  int32 expires_in_seconds = 2;
 }
 
 message DeleteRequest {

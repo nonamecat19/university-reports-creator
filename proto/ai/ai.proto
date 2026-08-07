@@ -25,8 +25,23 @@ service AIService {
   // FindSources — source suggestions for a section (FR-AI-13/14/15).
   rpc FindSources(FindSourcesRequest) returns (stream SourceSuggestion);
 
+  // TransformSelection — rephrase/expand/condense/translate/academic-ize a
+  // selection (FR-AI-06). Streams so the editor can render tokens as they
+  // arrive and the user can cancel.
+  rpc TransformSelection(TransformSelectionRequest) returns (stream GenerateTextChunk);
+
+  // ContinueWriting — continue from the cursor using the preceding text as
+  // context (FR-AI-06).
+  rpc ContinueWriting(ContinueWritingRequest) returns (stream GenerateTextChunk);
+
   // ParseReference — freeform string → CSL-JSON (FR-AI-13).
   rpc ParseReference(ParseReferenceRequest) returns (ParseReferenceResponse);
+
+  // GetAIStatus — what the client needs to render the AI tab honestly:
+  // whether AI is enabled at all (FR-AI kill switch), which provider is
+  // active and whether it is local (FR-AI-04 privacy notice), and whether
+  // tier-1 grammar is available (FR-AI-11).
+  rpc GetAIStatus(GetAIStatusRequest) returns (AIStatusResponse);
 
   // Ping — health check.
   rpc Ping(PingRequest) returns (PingResponse);
@@ -172,6 +187,62 @@ message CitationWarning {
   string claim = 1;
   string source_title = 2;
   string message = 3;
+}
+
+// ── Selection transforms & continuation (FR-AI-06) ──────────────────
+
+enum TransformKind {
+  TRANSFORM_KIND_UNSPECIFIED = 0;
+  // Say the same thing differently.
+  TRANSFORM_KIND_REPHRASE = 1;
+  TRANSFORM_KIND_EXPAND = 2;
+  TRANSFORM_KIND_CONDENSE = 3;
+  // uk↔en; direction is taken from target_language.
+  TRANSFORM_KIND_TRANSLATE = 4;
+  // Colloquial → impersonal academic Ukrainian.
+  TRANSFORM_KIND_ACADEMIC = 5;
+}
+
+message TransformSelectionRequest {
+  string user_id = 1;
+  string session_id = 2;
+  // The selected text, exactly as it appears in the document.
+  string text = 3;
+  TransformKind transform = 4;
+  // Only meaningful for TRANSFORM_KIND_TRANSLATE: "uk" | "en".
+  string target_language = 5;
+  // Document context so the result matches the surrounding writing (FR-AI-07).
+  string topic = 6;
+  string report_type = 7;
+}
+
+message ContinueWritingRequest {
+  string user_id = 1;
+  string session_id = 2;
+  // Text before the cursor; the service decides how much of it fits.
+  string preceding_text = 3;
+  string topic = 4;
+  string report_type = 5;
+  string section_title = 6;
+  int32 max_tokens = 7;
+}
+
+// ── Status (FR-AI-04, FR-AI-05, kill switch) ────────────────────────
+
+message GetAIStatusRequest {}
+
+message AIStatusResponse {
+  // False when AI_ENABLED=false: the client hides the tab entirely.
+  bool enabled = 1;
+  string provider = 2;
+  string model = 3;
+  // True for providers that run on our own hardware (ollama): document text
+  // never leaves the cluster, so no consent notice is needed (FR-AI-04).
+  bool local_provider = 4;
+  // Tier-1 grammar availability (FR-AI-11); style-only when false.
+  bool grammar_available = 5;
+  int32 max_concurrent_per_user = 6;
+  int32 max_requests_per_minute = 7;
 }
 
 // ── Reference parsing (FR-AI-13) ────────────────────────────────────
