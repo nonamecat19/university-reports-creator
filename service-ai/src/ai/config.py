@@ -16,6 +16,10 @@ class AIConfig(BaseSettings):
     log_level: str = "INFO"
     json_logging: bool = False
 
+    # Global kill switch: with AI_ENABLED=false the RPCs refuse and the client
+    # hides the AI tab, so the stack deploys without a GPU box.
+    ai_enabled: bool = True
+
     # Provider selection (FR-AI-01)
     ai_provider: Literal["ollama", "openai", "anthropic", "openrouter"] = "ollama"
     ai_model: str = "gemma3:8b"

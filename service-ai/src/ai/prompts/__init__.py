@@ -60,10 +60,44 @@ DRAFT_SECTION = """Напиши чернетку секції академічн
 CONTINUE_WRITING = """Продовж текст академічного звіту.
 
 Тема: {topic}
+Тип звіту: {report_type}
+Назва секції: {section_title}
+
 Попередній текст:
 {preceding_text}
 
-Продовж у тому ж стилі та на ту ж тему. Не повторюй те, що вже написано."""
+Продовж у тому ж стилі та на ту ж тему. Не повторюй те, що вже написано.
+Не додавай заголовків і не підсумовуй написане — просто продовж думку.
+Формат: простий текст, без markdown."""
+
+# Selection transforms (FR-AI-06). One template per transform, chosen by
+# TRANSFORM_INSTRUCTIONS below — the shared frame keeps the document context
+# and the output contract identical across transforms, so the editor can treat
+# every result the same way.
+TRANSFORM_SELECTION = """{instruction}
+
+Тема звіту: {topic}
+Тип звіту: {report_type}
+
+Текст:
+{text}
+
+Поверни ЛИШЕ перероблений текст, без пояснень, лапок і markdown."""
+
+TRANSFORM_INSTRUCTIONS = {
+    "rephrase": "Переформулюй наведений фрагмент академічного звіту, зберігши зміст.",
+    "expand": "Розгорни наведений фрагмент академічного звіту: додай деталізацію та пояснення, не змінюючи тверджень.",
+    "condense": "Стисни наведений фрагмент академічного звіту, зберігши всі суттєві твердження.",
+    "academic": (
+        "Переклади наведений фрагмент в академічний стиль: прибери розмовні звороти, "
+        "заміни першу особу однини на імперсональні конструкції, прибери канцеляризми."
+    ),
+}
+
+TRANSLATE_INSTRUCTIONS = {
+    "uk": "Переклади наведений фрагмент українською академічною мовою.",
+    "en": "Translate the fragment below into English academic prose.",
+}
 
 GRAMMAR_CHECK = """Перевір український текст на граматику, стиль та академічність.
 

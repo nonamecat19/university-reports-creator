@@ -17,12 +17,19 @@ from shared.logging import setup_logging
 
 
 def generate_proto_stubs() -> None:
-    """Generate Python proto stubs from .proto files if not already present."""
+    """Generate Python proto stubs when they are missing or older than the
+    .proto they came from.
+
+    The staleness check matters: without it an edited ai.proto silently keeps
+    the previous stubs, and the new RPC just never appears.
+    """
     proto_dir = Path(__file__).parent.parent.parent.parent / "proto" / "ai"
     output_dir = Path(__file__).parent / "proto"
 
-    if output_dir.exists() and list(output_dir.glob("*.py")):
-        return  # Stubs already generated
+    generated = list(output_dir.glob("*_pb2.py")) if output_dir.exists() else []
+    source = proto_dir / "ai.proto"
+    if generated and (not source.exists() or all(g.stat().st_mtime >= source.stat().st_mtime for g in generated)):
+        return
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
