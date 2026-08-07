@@ -55,6 +55,7 @@ const AUTOSAVE_DEBOUNCE_MS = 2000;
         <button type="button" class="tb-btn" (click)="triggerImagePick()" title="Вставити зображення"><i class="pi pi-image"></i></button>
         <button type="button" class="tb-btn" (click)="insertFormulaBlock()" title="Вставити формулу (нумерована, окремим рядком)"><i class="pi pi-percentage"></i></button>
         <button type="button" class="tb-btn" (click)="insertFormulaInline()" title="Вставити формулу в рядок тексту">f(x)</button>
+        <button type="button" class="tb-btn" (click)="insertFootnote()" title="Вставити виноску">x<sup>1</sup></button>
         <button type="button" class="tb-btn" (click)="editor.chain().focus().setHorizontalRule().run()" title="Розрив сторінки"><i class="pi pi-file"></i></button>
         <button type="button" class="tb-btn" (click)="requestCitation.emit()" title="Вставити посилання на джерело (Ctrl+Shift+C)"><i class="pi pi-bookmark"></i></button>
         <button type="button" class="tb-btn" (click)="requestCrossReference.emit()" title="Вставити перехресне посилання (рис./табл./розділ)"><i class="pi pi-link"></i></button>
@@ -197,6 +198,32 @@ const AUTOSAVE_DEBOUNCE_MS = 2000;
       margin-top: 0.35rem;
       padding: 0.35rem 0.5rem;
       font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      border: 1px solid var(--p-primary-300, #93b4fd);
+      border-radius: 6px;
+      resize: vertical;
+    }
+    /* The footnote marker's digit is a decoration too: the node stores the
+       note text, the number comes from document order. */
+    .editor-surface :global(.footnote-node) {
+      cursor: pointer;
+    }
+    .editor-surface :global(.footnote-node)::before {
+      content: attr(data-number);
+      vertical-align: super;
+      font-size: 0.75em;
+      color: var(--p-primary-600, #2563eb);
+    }
+    /* An empty note would export as an empty footnote and blocks export, so it
+       is flagged in the editor too. */
+    .editor-surface :global(.footnote-node.footnote-empty)::before {
+      color: var(--p-orange-500, #f97316);
+    }
+    .editor-surface :global(.footnote-text) {
+      display: block;
+      width: 100%;
+      margin-top: 0.35rem;
+      padding: 0.35rem 0.5rem;
       font-size: 0.85rem;
       border: 1px solid var(--p-primary-300, #93b4fd);
       border-radius: 6px;
@@ -429,6 +456,12 @@ export class SectionEditorComponent implements OnChanges, OnDestroy {
 
   insertFormulaInline(): void {
     this.editor.chain().focus().insertFormulaInline().run();
+  }
+
+  /** Inserted empty; the node view opens its text box on click, so the note is
+   * written where the marker sits. */
+  insertFootnote(): void {
+    this.editor.chain().focus().insertFootnote().run();
   }
 
   insertTable(): void {
