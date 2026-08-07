@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ДСТУ 8302:2015 «Інформація та документація. Бібліографічне посилання»
+  (FR-BIB-09). No high-quality public CSL exists for this standard, so this
+  style is a project deliverable with its own fixture suite
+  (tests/test_bibliography.py) — every source type of FR-BIB-01 has a golden
+  string checked against the standard.
+
+  Conventions encoded here:
+    * author as «Прізвище І. Б.» (no comma before initials), up to three
+      authors listed, four or more collapse to the first plus «та ін.»;
+    * sentence elements separated by «. », publisher block as «Місто : Видавець»;
+    * extent of a whole work as «320 с.», a range inside one as «С. 45–52.»;
+    * electronic resources end with «URL: … (дата звернення: 01.02.2024).».
+
+  Numbering is deliberately absent from the layout: the reference-list number
+  comes from FR-BIB-06 (by_order / alphabetical), which the application owns,
+  and is prepended when the list is emitted.
+-->
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0" default-locale="uk-UA">
+  <info>
+    <title>ДСТУ 8302:2015 (Україна)</title>
+    <id>https://university-reports-creator/styles/dstu-8302-2015</id>
+    <link href="https://university-reports-creator/styles/dstu-8302-2015" rel="self"/>
+    <category citation-format="numeric"/>
+    <category field="generic-base"/>
+    <summary>Бібліографічне посилання згідно з ДСТУ 8302:2015</summary>
+    <updated>2026-08-06T00:00:00+00:00</updated>
+  </info>
+
+  <locale xml:lang="uk">
+    <terms>
+      <term name="et-al">та ін.</term>
+      <term name="accessed">дата звернення</term>
+      <term name="no">№</term>
+      <term name="issue" form="short">№</term>
+      <term name="page" form="short">С.</term>
+      <term name="edition" form="short">вид.</term>
+      <term name="volume" form="short">т.</term>
+      <!-- ДСТУ uses an en dash in page ranges; the uk locale defaults to an
+           em dash. -->
+      <term name="page-range-delimiter">–</term>
+    </terms>
+  </locale>
+
+  <macro name="author">
+    <names variable="author">
+      <!-- No `and`: ДСТУ separates every author with a comma, never «і». -->
+      <name delimiter=", " initialize-with=". " name-as-sort-order="all"
+            sort-separator=" " et-al-min="4" et-al-use-first="1"/>
+      <et-al term="et-al"/>
+      <substitute>
+        <names variable="editor"/>
+      </substitute>
+    </names>
+  </macro>
+
+  <macro name="title">
+    <text variable="title"/>
+  </macro>
+
+  <macro name="genre">
+    <text variable="genre"/>
+  </macro>
+
+  <macro name="publisher">
+    <group delimiter=" : ">
+      <text variable="publisher-place"/>
+      <text variable="publisher"/>
+    </group>
+  </macro>
+
+  <macro name="year">
+    <date variable="issued">
+      <date-part name="year"/>
+    </date>
+  </macro>
+
+  <macro name="extent">
+    <group delimiter=" ">
+      <text variable="number-of-pages"/>
+      <text value="с."/>
+    </group>
+  </macro>
+
+  <macro name="pages">
+    <group delimiter=" ">
+      <label variable="page" form="short"/>
+      <text variable="page"/>
+    </group>
+  </macro>
+
+  <macro name="issue">
+    <group delimiter=" ">
+      <label variable="issue" form="short"/>
+      <text variable="issue"/>
+    </group>
+  </macro>
+
+  <macro name="volume">
+    <group delimiter=" ">
+      <label variable="volume" form="short"/>
+      <text variable="volume"/>
+    </group>
+  </macro>
+
+  <macro name="access">
+    <group delimiter=" ">
+      <text variable="URL" prefix="URL: "/>
+      <group prefix="(" suffix=")" delimiter=": ">
+        <text term="accessed"/>
+        <date variable="accessed">
+          <date-part name="day" form="numeric-leading-zeros" suffix="."/>
+          <date-part name="month" form="numeric-leading-zeros" suffix="."/>
+          <date-part name="year"/>
+        </date>
+      </group>
+    </group>
+  </macro>
+
+  <!-- Shapes, one per bibliographic pattern of the standard. They are macros
+       rather than inline layouts because `type` conditions must be written one
+       type per branch (citeproc-py matches the attribute literally, not as a
+       space-separated list), and every branch of a shape is identical. -->
+
+  <macro name="shape-periodical">
+    <group delimiter=". ">
+      <text macro="author"/>
+      <text macro="title"/>
+      <text variable="container-title"/>
+      <text macro="year"/>
+      <text macro="issue"/>
+      <text macro="pages"/>
+    </group>
+  </macro>
+
+  <macro name="shape-conference">
+    <group delimiter=". ">
+      <text macro="author"/>
+      <text macro="title"/>
+      <text variable="container-title"/>
+      <group delimiter=", ">
+        <text variable="publisher-place"/>
+        <text macro="year"/>
+      </group>
+      <text macro="pages"/>
+    </group>
+  </macro>
+
+  <macro name="shape-chapter">
+    <group delimiter=". ">
+      <text macro="author"/>
+      <text macro="title"/>
+      <text variable="container-title"/>
+      <group delimiter=", ">
+        <text macro="publisher"/>
+        <text macro="year"/>
+      </group>
+      <text macro="pages"/>
+    </group>
+  </macro>
+
+  <macro name="shape-thesis">
+    <group delimiter=". ">
+      <group delimiter=" : ">
+        <group delimiter=". ">
+          <text macro="author"/>
+          <text macro="title"/>
+        </group>
+        <text macro="genre"/>
+      </group>
+      <group delimiter=", ">
+        <text variable="publisher-place"/>
+        <text macro="year"/>
+      </group>
+      <text macro="extent"/>
+    </group>
+  </macro>
+
+  <macro name="shape-standard">
+    <group delimiter=". ">
+      <text variable="number"/>
+      <text macro="title"/>
+      <group delimiter=", ">
+        <text macro="publisher"/>
+        <text macro="year"/>
+      </group>
+      <text macro="extent"/>
+    </group>
+  </macro>
+
+  <macro name="shape-legislation">
+    <group delimiter=". ">
+      <group delimiter=" : ">
+        <text macro="title"/>
+        <group delimiter=" ">
+          <text variable="genre"/>
+          <text variable="number" prefix="№ "/>
+        </group>
+      </group>
+      <text variable="container-title"/>
+      <text macro="year"/>
+      <text macro="issue"/>
+    </group>
+  </macro>
+
+  <macro name="shape-online">
+    <group delimiter=". ">
+      <text macro="author"/>
+      <text macro="title"/>
+      <text variable="container-title"/>
+      <text macro="access"/>
+    </group>
+  </macro>
+
+  <macro name="shape-electronic-resource">
+    <group delimiter=". ">
+      <text macro="author"/>
+      <group delimiter=" ">
+        <text macro="title"/>
+        <text value="[Електронний ресурс]"/>
+      </group>
+      <text variable="container-title"/>
+      <text macro="access"/>
+    </group>
+  </macro>
+
+  <macro name="shape-book">
+    <group delimiter=". ">
+      <text macro="author"/>
+      <text macro="title"/>
+      <group delimiter=", ">
+        <text macro="publisher"/>
+        <text macro="year"/>
+      </group>
+      <text macro="extent"/>
+    </group>
+  </macro>
+
+  <citation>
+    <layout prefix="[" suffix="]" delimiter="; ">
+      <text variable="citation-number"/>
+      <group prefix=", " delimiter=" ">
+        <label variable="locator" form="short"/>
+        <text variable="locator"/>
+      </group>
+    </layout>
+  </citation>
+
+  <bibliography et-al-min="4" et-al-use-first="1">
+    <layout suffix=".">
+      <choose>
+        <if type="article-journal"><text macro="shape-periodical"/></if>
+        <else-if type="article-magazine"><text macro="shape-periodical"/></else-if>
+        <else-if type="article-newspaper"><text macro="shape-periodical"/></else-if>
+        <else-if type="article"><text macro="shape-periodical"/></else-if>
+        <else-if type="paper-conference"><text macro="shape-conference"/></else-if>
+        <else-if type="chapter"><text macro="shape-chapter"/></else-if>
+        <else-if type="thesis"><text macro="shape-thesis"/></else-if>
+        <else-if type="standard"><text macro="shape-standard"/></else-if>
+        <else-if type="legislation"><text macro="shape-legislation"/></else-if>
+        <else-if type="regulation"><text macro="shape-legislation"/></else-if>
+        <else-if type="bill"><text macro="shape-legislation"/></else-if>
+        <else-if type="webpage"><text macro="shape-online"/></else-if>
+        <else-if type="post-weblog"><text macro="shape-online"/></else-if>
+        <else-if type="post"><text macro="shape-online"/></else-if>
+        <else-if type="entry-encyclopedia"><text macro="shape-online"/></else-if>
+        <else-if type="software"><text macro="shape-electronic-resource"/></else-if>
+        <else-if type="dataset"><text macro="shape-electronic-resource"/></else-if>
+        <else><text macro="shape-book"/></else>
+      </choose>
+    </layout>
+  </bibliography>
+</style>

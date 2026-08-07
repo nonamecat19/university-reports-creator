@@ -16,11 +16,18 @@ from shared.logging import setup_logging
 
 
 def generate_proto_stubs() -> None:
-    """Generate Python proto stubs from .proto files if not already present."""
+    """Generate Python proto stubs from .proto files when they are missing or
+    older than the .proto they came from.
+
+    The staleness check matters: without it an edited render.proto silently
+    keeps the previous stubs, and the new field just never arrives.
+    """
     proto_dir = Path(__file__).parent.parent.parent.parent / "proto" / "render"
     output_dir = Path(__file__).parent / "proto"
 
-    if output_dir.exists() and list(output_dir.glob("*.py")):
+    generated = list(output_dir.glob("*_pb2.py")) if output_dir.exists() else []
+    source = proto_dir / "render.proto"
+    if generated and (not source.exists() or all(g.stat().st_mtime >= source.stat().st_mtime for g in generated)):
         return
 
     output_dir.mkdir(parents=True, exist_ok=True)

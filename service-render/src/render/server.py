@@ -9,7 +9,7 @@ from typing import Any
 
 import grpc
 
-from .bibliography import render_entries
+from .bibliography import DEFAULT_STYLE, UnknownStyleError, render_entries
 from .config import RenderConfig
 from .docx_export import RenderComment, RenderSectionInput, render_docx
 from .pdf_convert import PdfConversionError, convert_docx_to_pdf
@@ -28,6 +28,11 @@ class RenderServicer:
 
     def __init__(self, config: RenderConfig) -> None:
         self._config = config
+
+    def _render_pdf(self, docx_bytes: bytes) -> bytes:
+        return convert_docx_to_pdf(
+            docx_bytes, self._config.libreoffice_bin, self._config.libreoffice_timeout_seconds
+        )
 
     async def Ping(self, request: Any, context: grpc.aio.ServicerContext) -> Any:
         from render.proto import render_pb2
@@ -97,6 +102,12 @@ class RenderServicer:
                 suggestions_strategy=request.options.suggestions_strategy or "clean",
                 comments=comments,
                 authors=dict(request.authors),
+                table_continuation=request.options.table_continuation or "repeat_header",
+                # The continuation pass paginates through LibreOffice; injecting
+                # the converter keeps docx_export free of process/config concerns
+                # and lets the tests drive it with a stub.
+                render_pdf=self._render_pdf,
+                citation_style=request.options.citation_style,
             )
         except Exception as exc:  # noqa: BLE001 - surfaced to the caller as INTERNAL
             logger.exception("RenderDocx failed")
@@ -128,7 +139,15 @@ class RenderServicer:
     async def RenderBibliography(self, request: Any, context: grpc.aio.ServicerContext) -> Any:
         from render.proto import render_pb2
 
-        entries = render_entries(list(request.sources_csl_json), request.numbering_mode or "by_order")
+        try:
+            entries = render_entries(
+                list(request.sources_csl_json),
+                request.numbering_mode or "by_order",
+                request.style_id or DEFAULT_STYLE,
+            )
+        except UnknownStyleError as exc:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(exc))
+            return
         return render_pb2.RenderBibliographyResponse(
             entries=[
                 render_pb2.BibliographyEntry(number=e["number"], source_id=e["source_id"], formatted=e["formatted"])
