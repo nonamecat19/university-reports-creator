@@ -48,7 +48,9 @@ private createEditor(): void {
 
 `buildSectionExtensions()` in `schema/extensions.ts` is the single source of truth for what the editor can represent — it must match what the docx export translator can produce. Current rule: **no font-family/size/color marks** — typography comes from the template's styles at export time; the editor only edits structure and content. Don't add a color/font-size button or extension without updating the export translator in the same change.
 
-Deferred (documented in a comment, not yet implemented): formulas, citation/cross-reference nodes, footnotes. Check that comment before assuming a feature is missing vs. intentionally out of scope.
+Deferred (documented in a comment, not yet implemented): footnotes. Check that comment before assuming a feature is missing vs. intentionally out of scope.
+
+Citations, cross-references and formulas share one design: the node stores **only a reference** (`sourceId` / `targetId` / `latex`), and everything visible — the number, the wording, the rendered maths — is derived at display time from `numbering.ts` (editor) or `numbering.py` + `omml.py` (export). Never store a rendered label in a node; it will go stale.
 
 ## Custom Extensions
 

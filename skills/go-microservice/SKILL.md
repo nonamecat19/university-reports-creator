@@ -120,6 +120,8 @@ func (s *AuthService) GetProfile(ctx context.Context, _ *pb.GetProfileRequest) (
 
 The gateway injects `x-user-id` into metadata after JWT verification. The shared interceptor extracts it into typed context values.
 
+It also injects `x-user-name` — the caller's display name from the same verified token, falling back to the email. Services must **not** call service-auth to resolve a user id (FR-ARC-07), so any record that later has to show a human author (comments, suggestions, shares) copies `grpcmeta.UserName(ctx)` into an `author_name`/`user_name` column at write time. Names are for display only; authorization always uses the id.
+
 ## Error Handling
 
 Use `google.golang.org/grpc/status` with standard codes:
@@ -255,14 +257,14 @@ Services can reference each other via `s.Services.Template`.
 | `config` | `config.Load[T]()` generic env config loader |
 | `grpc` (grpcserver) | `grpcserver.New()` — standard server with interceptors, health, reflection, keepalive |
 | `interceptor` | `UnaryServerChain()` — context extraction → logging → recovery |
-| `grpcmeta` | `WithUserID(ctx)`, `UserID(ctx)`, `RequestID(ctx)` — typed context values |
+| `grpcmeta` | `WithUserID(ctx)`, `UserID(ctx)`, `UserName(ctx)`, `RequestID(ctx)` — typed context values |
 | `grpcerr` | `InvalidArgument()`, `StaleRevision()`, `CurrentRevision()` — structured errors |
 | `jwtauth` | `Sign()`, `Verify()`, `LoadPrivateKeyFromFile()`, `LoadPublicKeyFromFile()` |
 | `grpcclient` | `Dial()` — client with metadata propagation interceptor |
 
 ### Interceptor Chain Order
 
-1. `unaryContext()` — extracts `x-request-id` + `x-user-id` from metadata into context
+1. `unaryContext()` — extracts `x-request-id` + `x-user-id` + `x-user-name` from metadata into context
 2. `unaryLogging()` — structured slog with method/duration/code/request_id/user_id
 3. `unaryRecovery()` — panic → `codes.Internal`, full stack trace to slog
 
@@ -274,7 +276,7 @@ The gateway is **different** from other services — it's a transparent proxy, n
 - Uses `grpcproxy.Codec()` + `grpcproxy.TransparentHandler(director)`
 - Routes by proto package name (segment before first `.` in method)
 - Exempts auth endpoints (Register, Login, LoginWithGoogle, RefreshToken)
-- Injects `x-user-id` for all other endpoints
+- Injects `x-user-id` and `x-user-name` for all other endpoints
 - Uses `grpcweb.WrapServer` for browser gRPC-web translation
 
 ## Go Workspace
