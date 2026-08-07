@@ -72,10 +72,34 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      LANGUAGETOOL_ENABLED: "false"
+      AI_ENABLED: ${AI_ENABLED:-true}
+      LANGUAGETOOL_ENABLED: ${LANGUAGETOOL_ENABLED:-true}
+      LANGUAGETOOL_URL: ${LANGUAGETOOL_URL:-http://languagetool:8010}
       LOG_LEVEL: ${AI_LOG_LEVEL:-INFO}
+    depends_on:
+      languagetool:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  # Tier-1 grammar (FR-AI-11): deterministic uk spelling/grammar/punctuation,
+  # no LLM latency. Self-hosted so document text never leaves the stack, the
+  # same privacy stance as the default Ollama provider (FR-AI-04).
+  languagetool:
+    image: erikvl87/languagetool:latest
+    restart: unless-stopped
+    ports:
+      - "8010:8010"
+    environment:
+      # No n-gram data set: it is a multi-GB download and only improves
+      # confusion-pair detection. Java_Xmx bounds the JVM so LanguageTool
+      # cannot starve the rest of the stack on a laptop.
+      Java_Xmx: ${LANGUAGETOOL_HEAP:-512m}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8010/v2/languages > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   service-render:
     build:

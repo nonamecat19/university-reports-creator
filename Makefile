@@ -169,6 +169,8 @@ lint-go: ## Lint Go services with go vet
 		echo "Linting service-$$svc..."; \
 		cd service-$$svc && go vet ./... && cd ..; \
 	done
+	@echo "Linting pkg/shared..."
+	@cd pkg/shared && GOWORK=off go vet ./...
 
 lint-ts: ## Lint TypeScript (Angular) with Biome
 	cd client && npx biome check src/
@@ -202,6 +204,8 @@ test-go: ## Run Go tests
 		echo "Testing service-$$svc..."; \
 		cd service-$$svc && go test ./... && cd ..; \
 	done
+	@echo "Testing pkg/shared..."
+	@cd pkg/shared && GOWORK=off go test ./...
 
 test-ts: ## Run Angular tests (single run)
 	cd client && ng test --watch=false
