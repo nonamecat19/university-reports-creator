@@ -105,6 +105,15 @@ func NewDirector(backends Backends, publicKey *rsa.PublicKey) proxy.StreamDirect
 				return ctx, nil, status.Error(codes.Unauthenticated, "invalid or expired access token")
 			}
 			outgoing.Set(grpcmeta.UserIDKey, claims.Subject)
+			// Display name for authorship attribution (FR-ARC-07): backends
+			// must never call service-auth per request, so the name travels
+			// with the already-verified token. Email is the fallback for
+			// accounts with no name set.
+			if name := claims.Name; name != "" {
+				outgoing.Set(grpcmeta.UserNameKey, name)
+			} else if claims.Email != "" {
+				outgoing.Set(grpcmeta.UserNameKey, claims.Email)
+			}
 		}
 
 		return metadata.NewOutgoingContext(ctx, outgoing), conn, nil
