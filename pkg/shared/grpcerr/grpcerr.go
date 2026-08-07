@@ -154,3 +154,10 @@ func ExportViolations(err error) ([]ExportViolation, bool) {
 	}
 	return nil, false
 }
+
+// ResourceExhausted reports a quota/limit refusal — upload size caps, document
+// limits (NFR-05). Separate from InvalidArgument so a client can tell "you sent
+// something malformed" from "this is too big".
+func ResourceExhausted(msg string) error {
+	return status.Error(codes.ResourceExhausted, msg)
+}

@@ -19,7 +19,12 @@ const TokenTypeAccess = "access"
 
 type Claims struct {
 	jwt.RegisteredClaims
-	Email     string `json:"email"`
+	Email string `json:"email"`
+	// Display name at the time the token was issued. Carried in the token so
+	// downstream services can attribute writes to a human-readable author
+	// without calling service-auth (FR-ARC-07); a rename takes effect on the
+	// next token refresh.
+	Name      string `json:"name"`
 	TokenType string `json:"token_type"`
 }
 
@@ -74,8 +79,9 @@ func ParsePublicKeyPEM(data []byte) (*rsa.PublicKey, error) {
 	return rsaKey, nil
 }
 
-// Sign issues an access token per FR-AUTH-01: sub, email, iat, exp, jti claims.
-func Sign(priv *rsa.PrivateKey, jti, userID, email string, ttl time.Duration) (string, error) {
+// Sign issues an access token per FR-AUTH-01: sub, email, name, iat, exp, jti
+// claims.
+func Sign(priv *rsa.PrivateKey, jti, userID, email, name string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := &Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -85,6 +91,7 @@ func Sign(priv *rsa.PrivateKey, jti, userID, email string, ttl time.Duration) (s
 			ID:        jti,
 		},
 		Email:     email,
+		Name:      name,
 		TokenType: TokenTypeAccess,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)

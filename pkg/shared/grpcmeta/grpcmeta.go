@@ -12,6 +12,11 @@ import (
 const (
 	RequestIDKey = "x-request-id"
 	UserIDKey    = "x-user-id"
+	// UserNameKey carries the caller's display name, taken from the verified
+	// access token by the gateway. It exists so a service can attribute a
+	// write to a human-readable author without calling service-auth
+	// (FR-ARC-07); it is never an authorization input.
+	UserNameKey = "x-user-name"
 )
 
 type ctxKey string
@@ -19,6 +24,7 @@ type ctxKey string
 const (
 	ctxRequestID ctxKey = "request_id"
 	ctxUserID    ctxKey = "user_id"
+	ctxUserName  ctxKey = "user_name"
 )
 
 func WithRequestID(ctx context.Context, id string) context.Context {
@@ -38,6 +44,17 @@ func WithUserID(ctx context.Context, id string) context.Context {
 // or "" for unauthenticated calls.
 func UserID(ctx context.Context) string {
 	v, _ := ctx.Value(ctxUserID).(string)
+	return v
+}
+
+func WithUserName(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, ctxUserName, name)
+}
+
+// UserName returns the caller's display name as forwarded by the gateway, or
+// "" when the token carried none (older tokens, or an unauthenticated call).
+func UserName(ctx context.Context) string {
+	v, _ := ctx.Value(ctxUserName).(string)
 	return v
 }
 

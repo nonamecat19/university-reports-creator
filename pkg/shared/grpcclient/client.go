@@ -17,7 +17,7 @@ import (
 )
 
 // Dial opens a client connection to target with metadata propagation
-// (x-request-id, x-user-id), matching message-size/keepalive defaults, and
+// (x-request-id, x-user-id, x-user-name), matching message-size/keepalive defaults, and
 // insecure transport credentials (internal cluster traffic).
 func Dial(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	defaults := []grpc.DialOption{
@@ -36,7 +36,7 @@ func Dial(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	return grpc.NewClient(target, append(defaults, opts...)...)
 }
 
-// unaryMetadataPropagation forwards x-request-id/x-user-id from the caller's
+// unaryMetadataPropagation forwards x-request-id/x-user-id/x-user-name from the caller's
 // context onto outgoing metadata, so parity holds across service hops.
 func unaryMetadataPropagation() grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
@@ -45,6 +45,9 @@ func unaryMetadataPropagation() grpc.UnaryClientInterceptor {
 		}
 		if uid := grpcmeta.UserID(ctx); uid != "" {
 			ctx = metadata.AppendToOutgoingContext(ctx, grpcmeta.UserIDKey, uid)
+		}
+		if name := grpcmeta.UserName(ctx); name != "" {
+			ctx = metadata.AppendToOutgoingContext(ctx, grpcmeta.UserNameKey, name)
 		}
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}

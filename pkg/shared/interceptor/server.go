@@ -31,6 +31,9 @@ func unaryContext() grpc.UnaryServerInterceptor {
 		if userID := grpcmeta.FromIncoming(ctx, grpcmeta.UserIDKey); userID != "" {
 			ctx = grpcmeta.WithUserID(ctx, userID)
 		}
+		if userName := grpcmeta.FromIncoming(ctx, grpcmeta.UserNameKey); userName != "" {
+			ctx = grpcmeta.WithUserName(ctx, userName)
+		}
 		return handler(ctx, req)
 	}
 }
