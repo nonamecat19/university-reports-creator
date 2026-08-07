@@ -38,6 +38,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Abandoned chunk-upload sessions expire on their own (FR-API-13); the
+	// sweeper is what actually frees their buffers.
+	go fileService.StartSessionSweeper(ctx)
+
 	go srv.Run(cfg.GRPCPort)
 
 	<-ctx.Done()
