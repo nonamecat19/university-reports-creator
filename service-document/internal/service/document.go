@@ -30,6 +30,14 @@ func requireUserID(ctx context.Context) (string, error) {
 	return userID, nil
 }
 
+// callerName is the caller's display name, forwarded by the gateway from the
+// verified access token. service-document must not call service-auth
+// (FR-ARC-07), so every record that will later need to show a human author
+// captures the name at write time; "" when the token carried none.
+func callerName(ctx context.Context) string {
+	return grpcmeta.UserName(ctx)
+}
+
 func (s *DocumentService) CreateDocument(ctx context.Context, req *pb.CreateDocumentRequest) (*pb.DocumentResponse, error) {
 	ownerID, err := requireUserID(ctx)
 	if err != nil {
@@ -194,7 +202,8 @@ func (s *DocumentService) UpdateSettings(ctx context.Context, req *pb.UpdateSett
 }
 
 func (s *DocumentService) UpdateSection(ctx context.Context, req *pb.UpdateSectionRequest) (*pb.SectionResponse, error) {
-	if _, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_EDITOR); err != nil {
+	doc, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_EDITOR)
+	if err != nil {
 		return nil, err
 	}
 
@@ -206,6 +215,10 @@ func (s *DocumentService) UpdateSection(ctx context.Context, req *pb.UpdateSecti
 	if err := json.Unmarshal([]byte(raw), &content); err != nil {
 		return nil, grpcerr.InvalidArgument("content_json is not valid JSON", grpcerr.FieldViolation{Field: "content_json", Description: "must be valid JSON"})
 	}
+
+	// FR-EDT-10(c): at most one automatic snapshot per hour of active editing.
+	// Taken *before* the write so the snapshot is the last known-good state.
+	s.maybeHourlySnapshot(ctx, doc)
 
 	section, err := s.Repos.Section.UpdateContent(ctx, req.GetDocumentId(), req.GetSectionId(), content, int(req.GetSectionRevision()))
 	if err != nil {
@@ -230,31 +243,10 @@ func (s *DocumentService) UpdateSection(ctx context.Context, req *pb.UpdateSecti
 }
 
 // collectBlockIDs returns every stable block_id present in a ProseMirror doc
-// (FR-EDT-04) — the set comment anchors are matched against.
+// (FR-EDT-04) — the set comment anchors are matched against, and the set a
+// cross-reference is allowed to point at.
 func collectBlockIDs(node map[string]any) []string {
-	out := []string{}
-	var walk func(n map[string]any)
-	walk = func(n map[string]any) {
-		if n == nil {
-			return
-		}
-		if attrs, ok := n["attrs"].(map[string]any); ok {
-			if id, ok := attrs["blockId"].(string); ok && id != "" {
-				out = append(out, id)
-			}
-		}
-		content, ok := n["content"].([]any)
-		if !ok {
-			return
-		}
-		for _, child := range content {
-			if childMap, ok := child.(map[string]any); ok {
-				walk(childMap)
-			}
-		}
-	}
-	walk(node)
-	return out
+	return collectAttr(node, "", "blockId")
 }
 
 func (s *DocumentService) AddSection(ctx context.Context, req *pb.AddSectionRequest) (*pb.SectionResponse, error) {

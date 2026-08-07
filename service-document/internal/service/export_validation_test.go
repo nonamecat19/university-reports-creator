@@ -139,3 +139,92 @@ func TestCollectCitationSourceIDsEmptyDoc(t *testing.T) {
 		t.Fatalf("expected none, got %v", got)
 	}
 }
+
+func TestCollectEmptyFormulaBlockIDs(t *testing.T) {
+	content := map[string]any{
+		"type": "doc",
+		"content": []any{
+			map[string]any{
+				"type":  "formulaBlock",
+				"attrs": map[string]any{"blockId": "f-filled", "latex": "E = mc^2"},
+			},
+			map[string]any{
+				"type":  "formulaBlock",
+				"attrs": map[string]any{"blockId": "f-blank", "latex": "   "},
+			},
+			map[string]any{
+				"type": "paragraph",
+				"content": []any{
+					map[string]any{"type": "formulaInline", "attrs": map[string]any{"latex": "x_i"}},
+					map[string]any{"type": "formulaInline", "attrs": map[string]any{"latex": ""}},
+				},
+			},
+		},
+	}
+
+	got := collectEmptyFormulaBlockIDs(content)
+	if len(got) != 2 {
+		t.Fatalf("expected the blank block and the blank inline formula, got %v", got)
+	}
+	if got[0] != "f-blank" || got[1] != "" {
+		t.Fatalf("unexpected subjects: %v", got)
+	}
+}
+
+func TestValidateForExportBlocksEmptyFormula(t *testing.T) {
+	doc := &repository.Document{Metadata: map[string]string{"topic": "Тема"}}
+	version := &repository.TemplateVersion{Model: map[string]any{}}
+	sections := []repository.Section{{
+		ID:    "s1",
+		Title: "Розділ 1",
+		Content: map[string]any{
+			"type": "doc",
+			"content": []any{
+				map[string]any{"type": "formulaBlock", "attrs": map[string]any{"blockId": "f1", "latex": ""}},
+			},
+		},
+	}}
+
+	violations := validateForExport(doc, version, sections, nil)
+	if len(violations) != 1 || violations[0].Type != "EMPTY_FORMULA" || violations[0].Subject != "f1" {
+		t.Fatalf("unexpected violations: %+v", violations)
+	}
+}
+
+func TestValidateForExportBlocksOrphanCrossReference(t *testing.T) {
+	doc := &repository.Document{Metadata: map[string]string{}}
+	version := &repository.TemplateVersion{Model: map[string]any{}}
+	sections := []repository.Section{{
+		ID:    "s1",
+		Title: "Розділ 1",
+		Content: map[string]any{
+			"type": "doc",
+			"content": []any{
+				map[string]any{
+					"type":  "image",
+					"attrs": map[string]any{"blockId": "img-1"},
+				},
+				map[string]any{
+					"type":  "paragraph",
+					"attrs": map[string]any{"blockId": "p-1"},
+					"content": []any{
+						// Resolves: points at the figure above.
+						map[string]any{"type": "crossReference", "attrs": map[string]any{"targetId": "img-1"}},
+						// Resolves: a whole section is a valid target too.
+						map[string]any{"type": "crossReference", "attrs": map[string]any{"targetId": "s1"}},
+						// Orphan: nothing carries this id any more.
+						map[string]any{"type": "crossReference", "attrs": map[string]any{"targetId": "tbl-gone"}},
+					},
+				},
+			},
+		},
+	}}
+
+	violations := validateForExport(doc, version, sections, nil)
+	if len(violations) != 1 {
+		t.Fatalf("expected only the orphan to block, got %+v", violations)
+	}
+	if violations[0].Type != "ORPHANED_CROSS_REFERENCE" || violations[0].Subject != "tbl-gone" {
+		t.Fatalf("unexpected violation: %+v", violations[0])
+	}
+}

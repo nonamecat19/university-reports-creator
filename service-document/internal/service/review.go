@@ -113,13 +113,13 @@ func (s *DocumentService) AcceptShareLink(ctx context.Context, req *pb.AcceptSha
 	case share.UserID == userID:
 		// Already claimed by this account — accepting again is a no-op.
 	case share.UserID == "":
-		if _, err := s.Repos.Share.BindUser(ctx, share.ID, userID); err != nil {
+		if _, err := s.Repos.Share.BindUser(ctx, share.ID, userID, callerName(ctx)); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to accept share: %v", err)
 		}
 	default:
 		// A link already claimed by someone else still works for others: each
 		// accepting account gets its own revocable grant row.
-		if _, err := s.Repos.Share.CloneForUser(ctx, share, userID); err != nil {
+		if _, err := s.Repos.Share.CloneForUser(ctx, share, userID, callerName(ctx)); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to accept share: %v", err)
 		}
 	}
@@ -146,12 +146,12 @@ func (s *DocumentService) CreateComment(ctx context.Context, req *pb.CreateComme
 			grpcerr.FieldViolation{Field: "body", Description: "must not be empty"})
 	}
 
-	author := userID
+	author, authorName := userID, callerName(ctx)
 	if req.GetAiCategory() != "" {
-		author = aiAuthor
+		author, authorName = aiAuthor, ""
 	}
 
-	comment, err := s.Repos.Comment.Create(ctx, doc.ID, req.GetSectionId(), "", author,
+	comment, err := s.Repos.Comment.Create(ctx, doc.ID, req.GetSectionId(), "", author, authorName,
 		req.GetAiCategory(), req.GetBody(), anchorFromProto(req.GetAnchor()))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create comment: %v", err)
@@ -179,7 +179,8 @@ func (s *DocumentService) ReplyComment(ctx context.Context, req *pb.ReplyComment
 
 	// A reply inherits the root's anchor so the whole thread highlights the
 	// same range, and threads stay one level deep.
-	reply, err := s.Repos.Comment.Create(ctx, doc.ID, root.SectionID, root.ID, userID, "", req.GetBody(), root.Anchor)
+	reply, err := s.Repos.Comment.Create(ctx, doc.ID, root.SectionID, root.ID, userID,
+		callerName(ctx), "", req.GetBody(), root.Anchor)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to reply: %v", err)
 	}
@@ -306,7 +307,8 @@ func (s *DocumentService) RegisterSuggestions(ctx context.Context, req *pb.Regis
 	if kind == "" {
 		kind = "insert"
 	}
-	suggestions, err := s.Repos.Suggestion.Register(ctx, doc.ID, req.GetSectionId(), userID, kind, req.GetSuggestionIds())
+	suggestions, err := s.Repos.Suggestion.Register(ctx, doc.ID, req.GetSectionId(), userID,
+		callerName(ctx), kind, req.GetSuggestionIds())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to register suggestions: %v", err)
 	}
@@ -487,6 +489,7 @@ func shareToProto(share *repository.Share, rawToken string) *pb.Share {
 		Kind:       share.Kind,
 		Role:       roleFromString(share.Role),
 		UserId:     share.UserID,
+		UserName:   share.UserName,
 		Email:      share.Email,
 		LinkToken:  rawToken,
 		Revoked:    share.RevokedAt != nil,
@@ -513,6 +516,7 @@ func commentToProto(c *repository.Comment) *pb.Comment {
 		SectionId:    c.SectionID,
 		ThreadRootId: c.ThreadRootID,
 		Author:       c.Author,
+		AuthorName:   c.AuthorName,
 		AiCategory:   c.AICategory,
 		Anchor: &pb.CommentAnchor{
 			BlockId:      c.Anchor.BlockID,
@@ -538,6 +542,7 @@ func suggestionToProto(s *repository.Suggestion) *pb.Suggestion {
 		SectionId:    s.SectionID,
 		SuggestionId: s.SuggestionID,
 		AuthorId:     s.AuthorID,
+		AuthorName:   s.AuthorName,
 		Kind:         s.Kind,
 		Status:       s.Status,
 		CreatedAt:    timestamppb.New(s.CreatedAt),
@@ -554,4 +559,96 @@ func suggestionsToProto(list []repository.Suggestion) []*pb.Suggestion {
 		out = append(out, suggestionToProto(&list[i]))
 	}
 	return out
+}
+
+// SyncAiComments reconciles the AI comments of a document with the findings of
+// a fresh analysis run (FR-AI-09).
+//
+// The rule the requirement states is "re-running analysis resolves obsolete AI
+// comments rather than duplicating". So a finding is identified by what makes
+// it the same finding to a reader — its section, its category, and its text —
+// and:
+//
+//   - a finding that already has an open AI comment is left completely alone,
+//     replies and all;
+//   - a finding with no open comment becomes one;
+//   - an open AI comment this run did not report is resolved, not deleted, so
+//     the student can still see what the previous run said.
+//
+// User comments are never touched.
+func (s *DocumentService) SyncAiComments(ctx context.Context, req *pb.SyncAiCommentsRequest) (*pb.SyncAiCommentsResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	doc, _, err := s.requireAccess(ctx, req.GetDocumentId(), pb.Role_ROLE_EDITOR)
+	if err != nil {
+		return nil, err
+	}
+
+	existing, err := s.Repos.Comment.ListByDocument(ctx, doc.ID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list comments: %v", err)
+	}
+
+	// Open AI comments from earlier runs, keyed by identity. A duplicate key
+	// (two identical findings) keeps the first and lets the rest be resolved.
+	open := make(map[string]*repository.Comment)
+	for i := range existing {
+		comment := &existing[i]
+		if comment.Author != aiAuthor || comment.ResolvedAt != nil || comment.ThreadRootID != "" {
+			continue
+		}
+		key := aiFindingKey(comment.SectionID, comment.AICategory, comment.Body)
+		if _, seen := open[key]; !seen {
+			open[key] = comment
+		}
+	}
+
+	resp := &pb.SyncAiCommentsResponse{}
+	reported := make(map[string]bool, len(req.GetFindings()))
+
+	for _, finding := range req.GetFindings() {
+		body := strings.TrimSpace(finding.GetBody())
+		if body == "" {
+			continue
+		}
+		key := aiFindingKey(finding.GetSectionId(), finding.GetAiCategory(), body)
+		if reported[key] {
+			continue // the run reported the same finding twice
+		}
+		reported[key] = true
+
+		if _, ok := open[key]; ok {
+			resp.Kept++
+			continue
+		}
+
+		comment, err := s.Repos.Comment.Create(ctx, doc.ID, finding.GetSectionId(), "", aiAuthor,
+			"", finding.GetAiCategory(), body, anchorFromProto(finding.GetAnchor()))
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to create AI comment: %v", err)
+		}
+		resp.Created = append(resp.Created, commentToProto(comment))
+	}
+
+	for key, comment := range open {
+		if reported[key] {
+			continue
+		}
+		if _, err := s.Repos.Comment.SetResolved(ctx, doc.ID, comment.ID, userID, true); err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to resolve obsolete AI comment: %v", err)
+		}
+		resp.Resolved++
+	}
+
+	return resp, nil
+}
+
+// aiFindingKey identifies a finding by what makes it the same finding to a
+// reader. Anchors are deliberately excluded: an edit that shifts an anchor
+// does not make it a new problem, and keying on it would resurrect the same
+// comment on every run.
+func aiFindingKey(sectionID, category, body string) string {
+	return sectionID + "\x00" + category + "\x00" + strings.Join(strings.Fields(body), " ")
 }

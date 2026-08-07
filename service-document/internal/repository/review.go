@@ -35,7 +35,9 @@ type Share struct {
 	Role string `json:"role"`
 	// Bound on accept (FR-REV-02); empty until then.
 	UserID string `json:"user_id"`
-	Email  string `json:"email"`
+	// Display name of the bound user, captured on accept (FR-ARC-07).
+	UserName string `json:"user_name"`
+	Email    string `json:"email"`
 	// FR-DAT-03: only the hash is stored — the raw token exists solely in the
 	// URL handed to the reviewer.
 	LinkTokenHash string     `json:"link_token_hash"`
@@ -76,8 +78,8 @@ func (r *ShareRepository) Create(ctx context.Context, documentID, kind, role, em
 	id := uuid.New().String()
 
 	const q = `CREATE type::record($table, $id) CONTENT {
-		document_id: $document_id, kind: $kind, role: $role, user_id: '', email: $email,
-		link_token_hash: $token_hash, revoked_at: NONE, created_at: $created_at
+		document_id: $document_id, kind: $kind, role: $role, user_id: '', user_name: '',
+		email: $email, link_token_hash: $token_hash, revoked_at: NONE, created_at: $created_at
 	}`
 	res, err := surrealdb.Query[[]Share](ctx, r.db, q, map[string]any{
 		"table": shareTable, "id": id, "document_id": documentID, "kind": kind,
@@ -156,10 +158,10 @@ func (r *ShareRepository) FindPendingEmailInvite(ctx context.Context, documentID
 // BindUser attaches an account to a share on first accept. A link share is
 // cloned per accepting user so one link can grant several people access while
 // each keeps its own revocable row.
-func (r *ShareRepository) BindUser(ctx context.Context, shareID, userID string) (*Share, error) {
-	const q = `UPDATE type::record($table, $id) SET user_id = $user_id WHERE user_id = ''`
+func (r *ShareRepository) BindUser(ctx context.Context, shareID, userID, userName string) (*Share, error) {
+	const q = `UPDATE type::record($table, $id) SET user_id = $user_id, user_name = $user_name WHERE user_id = ''`
 	res, err := surrealdb.Query[[]Share](ctx, r.db, q, map[string]any{
-		"table": shareTable, "id": shareID, "user_id": userID,
+		"table": shareTable, "id": shareID, "user_id": userID, "user_name": userName,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bind share: %w", err)
@@ -168,16 +170,18 @@ func (r *ShareRepository) BindUser(ctx context.Context, shareID, userID string) 
 }
 
 // CloneForUser records an additional grant from an already-claimed link share.
-func (r *ShareRepository) CloneForUser(ctx context.Context, source *Share, userID string) (*Share, error) {
+func (r *ShareRepository) CloneForUser(ctx context.Context, source *Share, userID, userName string) (*Share, error) {
 	id := uuid.New().String()
 
 	const q = `CREATE type::record($table, $id) CONTENT {
-		document_id: $document_id, kind: 'link', role: $role, user_id: $user_id, email: '',
-		link_token_hash: $token_hash, revoked_at: NONE, created_at: $created_at
+		document_id: $document_id, kind: 'link', role: $role, user_id: $user_id,
+		user_name: $user_name, email: '', link_token_hash: $token_hash, revoked_at: NONE,
+		created_at: $created_at
 	}`
 	res, err := surrealdb.Query[[]Share](ctx, r.db, q, map[string]any{
 		"table": shareTable, "id": id, "document_id": source.DocumentID, "role": source.Role,
-		"user_id": userID, "token_hash": source.LinkTokenHash, "created_at": time.Now(),
+		"user_id": userID, "user_name": userName, "token_hash": source.LinkTokenHash,
+		"created_at": time.Now(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("clone share: %w", err)
@@ -227,7 +231,11 @@ type Comment struct {
 	SectionID    string          `json:"section_id"`
 	ThreadRootID string          `json:"thread_root_id"`
 	// User id, or "ai" for analysis findings (FR-AI-09).
-	Author     string        `json:"author"`
+	Author string `json:"author"`
+	// Display name captured at write time (FR-ARC-07): service-document has no
+	// access to the user store, so exports and the comment list would otherwise
+	// show raw user ids. Empty for "ai" and for pre-existing rows.
+	AuthorName string        `json:"author_name"`
 	AICategory string        `json:"ai_category"`
 	Anchor     CommentAnchor `json:"anchor"`
 	Orphaned   bool          `json:"orphaned"`
@@ -247,18 +255,19 @@ func NewCommentRepository(db *surrealdb.DB) *CommentRepository {
 	return &CommentRepository{db: db}
 }
 
-func (r *CommentRepository) Create(ctx context.Context, documentID, sectionID, threadRootID, author, aiCategory, body string, anchor CommentAnchor) (*Comment, error) {
+func (r *CommentRepository) Create(ctx context.Context, documentID, sectionID, threadRootID, author, authorName, aiCategory, body string, anchor CommentAnchor) (*Comment, error) {
 	id := uuid.New().String()
 
 	const q = `CREATE type::record($table, $id) CONTENT {
 		document_id: $document_id, section_id: $section_id, thread_root_id: $thread_root_id,
-		author: $author, ai_category: $ai_category, anchor: $anchor, orphaned: false,
-		body: $body, resolved_by: '', resolved_at: NONE, created_at: $created_at
+		author: $author, author_name: $author_name, ai_category: $ai_category, anchor: $anchor,
+		orphaned: false, body: $body, resolved_by: '', resolved_at: NONE, created_at: $created_at
 	}`
 	res, err := surrealdb.Query[[]Comment](ctx, r.db, q, map[string]any{
 		"table": commentTable, "id": id, "document_id": documentID, "section_id": sectionID,
-		"thread_root_id": threadRootID, "author": author, "ai_category": aiCategory,
-		"anchor": anchor, "body": body, "created_at": time.Now(),
+		"thread_root_id": threadRootID, "author": author, "author_name": authorName,
+		"ai_category": aiCategory,
+		"anchor":      anchor, "body": body, "created_at": time.Now(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create comment: %w", err)
@@ -362,6 +371,8 @@ type Suggestion struct {
 	SectionID    string          `json:"section_id"`
 	SuggestionID string          `json:"suggestion_id"`
 	AuthorID     string          `json:"author_id"`
+	// Display name captured at registration time (FR-ARC-07); see Comment.
+	AuthorName string `json:"author_name"`
 	// insert | delete | format
 	Kind string `json:"kind"`
 	// pending | accepted | rejected
@@ -404,7 +415,7 @@ func (r *SuggestionRepository) FindPending(ctx context.Context, documentID, sugg
 // Register inserts registry rows for suggestion ids that aren't tracked yet.
 // The marks in section content are the source of truth (FR-REV-11); this is
 // the index used for listing, counters and accept/reject.
-func (r *SuggestionRepository) Register(ctx context.Context, documentID, sectionID, authorID, kind string, suggestionIDs []string) ([]Suggestion, error) {
+func (r *SuggestionRepository) Register(ctx context.Context, documentID, sectionID, authorID, authorName, kind string, suggestionIDs []string) ([]Suggestion, error) {
 	for _, sid := range suggestionIDs {
 		existing, err := r.FindPending(ctx, documentID, sid)
 		if err != nil {
@@ -416,13 +427,13 @@ func (r *SuggestionRepository) Register(ctx context.Context, documentID, section
 
 		const q = `CREATE type::record($table, $id) CONTENT {
 			document_id: $document_id, section_id: $section_id, suggestion_id: $suggestion_id,
-			author_id: $author_id, kind: $kind, status: 'pending', created_at: $created_at,
-			resolved_at: NONE
+			author_id: $author_id, author_name: $author_name, kind: $kind, status: 'pending',
+			created_at: $created_at, resolved_at: NONE
 		}`
 		if _, err := surrealdb.Query[[]Suggestion](ctx, r.db, q, map[string]any{
 			"table": suggestionTable, "id": uuid.New().String(), "document_id": documentID,
 			"section_id": sectionID, "suggestion_id": sid, "author_id": authorID,
-			"kind": kind, "created_at": time.Now(),
+			"author_name": authorName, "kind": kind, "created_at": time.Now(),
 		}); err != nil {
 			return nil, fmt.Errorf("register suggestion: %w", err)
 		}

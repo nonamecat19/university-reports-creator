@@ -8,7 +8,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	filepb "github.com/nnc/university-reports-creator/gen/go/file"
 	renderpb "github.com/nnc/university-reports-creator/gen/go/render"
 	pb "github.com/nnc/university-reports-creator/gen/go/template"
 	"github.com/nnc/university-reports-creator/pkg/shared/grpcerr"
@@ -58,14 +57,14 @@ func (s *TemplateService) CreateTemplate(ctx context.Context, req *pb.CreateTemp
 // (FR-TPL-08). Malformed uploads surface as InvalidArgument (FR-TPL-10
 // "errors reject upload") straight from service-render.
 func (s *TemplateService) parseTemplateFile(ctx context.Context, fileRef string) (map[string]any, []string, error) {
-	fileResp, err := s.Clients.Files.Download(ctx, &filepb.DownloadRequest{Id: fileRef})
+	fileResp, err := downloadFile(ctx, s.Clients.Files, fileRef)
 	if err != nil {
 		return nil, nil, status.Errorf(codes.Internal, "failed to fetch uploaded template file: %v", err)
 	}
 
 	parseResp, err := s.Clients.Render.ParseTemplate(ctx, &renderpb.ParseTemplateRequest{
-		DocxBytes: fileResp.GetData(),
-		Filename:  fileResp.GetFilename(),
+		DocxBytes: fileResp.Data,
+		Filename:  fileResp.Filename,
 	})
 	if err != nil {
 		return nil, nil, err

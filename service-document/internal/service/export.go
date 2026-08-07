@@ -48,7 +48,9 @@ func (s *DocumentService) PreviewPdf(ctx context.Context, req *pb.PreviewPdfRequ
 	if err != nil {
 		return nil, err
 	}
-	job, err := s.runExportPipeline(ctx, req.GetDocumentId(), ownerID, "docx+pdf", "clean", "repeat_header", false)
+	// Empty strategy = the document's own setting, so the preview paginates the
+	// same way the real export will (FR-TBL-09).
+	job, err := s.runExportPipeline(ctx, req.GetDocumentId(), ownerID, "docx+pdf", "clean", "", false)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +91,15 @@ func (s *DocumentService) runExportPipeline(
 	}
 	if doc.TemplateID == "" {
 		return nil, status.Error(codes.FailedPrecondition, "document has no template; export requires one")
+	}
+
+	// FR-TBL-09: the strategy is a per-export override of the document's own
+	// setting, so an unset option means "whatever the document is configured for".
+	if tableContinuation == "" {
+		tableContinuation = doc.Settings.TableContinuation
+	}
+	if tableContinuation == "" {
+		tableContinuation = "repeat_header"
 	}
 
 	version, err := s.Repos.Template.CurrentVersion(ctx, doc.TemplateID, doc.TemplateVersion)
@@ -154,7 +165,14 @@ func (s *DocumentService) runExportPipeline(
 		}
 	}
 
-	artifacts, warnings, pipelineErr := s.doExport(ctx, doc, template, version, sections, sourcesCSL, comments, format, suggestionsStrategy, tableContinuation, includeComments)
+	// FR-ARC-07: names come from the denormalized author_name columns, never
+	// from a call to service-auth.
+	authors, err := s.exportAuthors(ctx, doc.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	artifacts, warnings, pipelineErr := s.doExport(ctx, doc, template, version, sections, sourcesCSL, comments, authors, format, suggestionsStrategy, tableContinuation, includeComments)
 	if pipelineErr != nil {
 		if failed, ferr := s.Repos.ExportJob.Fail(ctx, job.ID, pipelineErr.Error()); ferr == nil {
 			job = failed
@@ -177,10 +195,11 @@ func (s *DocumentService) doExport(
 	sections []repository.Section,
 	sourcesCSL []string,
 	comments []*renderpb.RenderCommentAnchor,
+	authors map[string]string,
 	format, suggestionsStrategy, tableContinuation string,
 	includeComments bool,
 ) ([]repository.ExportArtifact, []string, error) {
-	templateFile, err := s.Clients.Files.Download(ctx, &filepb.DownloadRequest{Id: version.FileKey})
+	templateFile, err := downloadFile(ctx, s.Clients.Files, version.FileKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fetch template file: %w", err)
 	}
@@ -206,17 +225,17 @@ func (s *DocumentService) doExport(
 
 	images := make(map[string][]byte, len(imageKeys))
 	for key := range imageKeys {
-		fileResp, err := s.Clients.Files.Download(ctx, &filepb.DownloadRequest{Id: key})
+		fileResp, err := downloadFile(ctx, s.Clients.Files, key)
 		if err != nil {
 			continue // missing image: skip, translator just omits it
 		}
-		images[key] = fileResp.GetData()
+		images[key] = fileResp.Data
 	}
 
 	modelJSON, _ := json.Marshal(version.Model)
 
 	renderResp, err := s.Clients.Render.RenderDocx(ctx, &renderpb.RenderDocxRequest{
-		TemplateDocx: templateFile.GetData(),
+		TemplateDocx: templateFile.Data,
 		ModelJson:    string(modelJSON),
 		Metadata:     doc.Metadata,
 		Sections:     renderSections,
@@ -224,8 +243,10 @@ func (s *DocumentService) doExport(
 		// (FR-BIB-06) — see bibliographyInput.
 		SourcesCslJson: sourcesCSL,
 		Comments:       comments,
+		Authors:        authors,
 		Options: &renderpb.RenderOptions{
 			NumberingMode:       doc.Settings.NumberingMode,
+			CitationStyle:       doc.Settings.CitationStyle,
 			TableContinuation:   tableContinuation,
 			IncludeUncited:      doc.Settings.IncludeUncited,
 			SuggestionsStrategy: suggestionsStrategy,
@@ -249,6 +270,7 @@ func (s *DocumentService) doExport(
 		Filename:    baseFilename + ".docx",
 		ContentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 		Data:        renderResp.GetDocxBytes(),
+		Purpose:     filepb.Purpose_PURPOSE_EXPORTS,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("store docx artifact: %w", err)
@@ -266,6 +288,7 @@ func (s *DocumentService) doExport(
 				Filename:    baseFilename + ".pdf",
 				ContentType: "application/pdf",
 				Data:        pdfResp.GetPdfBytes(),
+				Purpose:     filepb.Purpose_PURPOSE_EXPORTS,
 			})
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("failed to store PDF artifact: %v", err))
@@ -423,4 +446,42 @@ func (s *DocumentService) exportComments(ctx context.Context, documentID string)
 		})
 	}
 	return out, nil
+}
+
+// aiAuthorName is what service-render prints as the author of an exported AI
+// finding; the "ai" pseudo-user has no account and therefore no display name.
+const aiAuthorName = "AI-асистент"
+
+// exportAuthors builds the user_id -> display name map service-render needs to
+// label tracked changes and comments (FR-REV-12/13).
+//
+// The names are read off the comment and suggestion records themselves: each
+// captured its author's name when it was written, because FR-ARC-07 forbids
+// service-document from asking service-auth who a user is. Ids written before
+// that denormalization have no entry, and service-render falls back to printing
+// the id.
+func (s *DocumentService) exportAuthors(ctx context.Context, documentID string) (map[string]string, error) {
+	authors := map[string]string{aiAuthor: aiAuthorName}
+
+	comments, err := s.Repos.Comment.ListByDocument(ctx, documentID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list comments: %v", err)
+	}
+	for i := range comments {
+		if c := &comments[i]; c.Author != "" && c.AuthorName != "" {
+			authors[c.Author] = c.AuthorName
+		}
+	}
+
+	suggestions, err := s.Repos.Suggestion.ListByDocument(ctx, documentID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list suggestions: %v", err)
+	}
+	for i := range suggestions {
+		if sg := &suggestions[i]; sg.AuthorID != "" && sg.AuthorName != "" {
+			authors[sg.AuthorID] = sg.AuthorName
+		}
+	}
+
+	return authors, nil
 }

@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"log/slog"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -147,6 +149,28 @@ func (s *DocumentService) takeSnapshot(ctx context.Context, doc *repository.Docu
 
 	s.pruneSnapshots(ctx, doc.ID)
 	return snapshot, nil
+}
+
+// autoSnapshotInterval is FR-EDT-10(c)'s "at most once per hour of active
+// editing": the clock only advances when someone actually edits, so an idle
+// document never accumulates snapshots.
+const autoSnapshotInterval = time.Hour
+
+// maybeHourlySnapshot takes an automatic snapshot when the newest one is older
+// than the interval. Failures are logged, never returned — losing an automatic
+// snapshot must not fail the edit that triggered it.
+func (s *DocumentService) maybeHourlySnapshot(ctx context.Context, doc *repository.Document) {
+	existing, err := s.Repos.Snapshot.ListByDocument(ctx, doc.ID)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to list snapshots for auto-snapshot check", "document_id", doc.ID, "error", err)
+		return
+	}
+	if len(existing) > 0 && time.Since(existing[0].CreatedAt) < autoSnapshotInterval {
+		return
+	}
+	if _, err := s.takeSnapshot(ctx, doc, "", "auto"); err != nil {
+		slog.WarnContext(ctx, "failed to take automatic snapshot", "document_id", doc.ID, "error", err)
+	}
 }
 
 func (s *DocumentService) pruneSnapshots(ctx context.Context, documentID string) {
