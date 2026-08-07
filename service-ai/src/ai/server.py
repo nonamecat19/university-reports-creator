@@ -586,8 +586,14 @@ class AIServicer:
 
     @staticmethod
     def _get_user_id(context: grpc.ServicerContext) -> str:
+        """The caller's id, used as the rate-limit key (FR-AI-05).
+
+        `x-user-id` is the cross-service metadata contract (FR-ARC-15) — it is
+        what the gateway injects after verifying the access token. `user-id` is
+        accepted too, for direct calls that predate the contract.
+        """
         metadata = dict(context.invocation_metadata())
-        user_id = metadata.get("user-id", "anonymous")
-        if user_id == "anonymous":
-            context.abort(grpc.StatusCode.UNAUTHENTICATED, "missing user-id")
+        user_id = metadata.get("x-user-id") or metadata.get("user-id") or ""
+        if not user_id:
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, "missing x-user-id")
         return user_id
