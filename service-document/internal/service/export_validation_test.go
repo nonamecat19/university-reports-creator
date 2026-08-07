@@ -191,6 +191,82 @@ func TestValidateForExportBlocksEmptyFormula(t *testing.T) {
 	}
 }
 
+func TestValidateForExportBlocksEmptyFootnote(t *testing.T) {
+	doc := &repository.Document{Metadata: map[string]string{}}
+	version := &repository.TemplateVersion{Model: map[string]any{}}
+	sections := []repository.Section{{
+		ID:    "s1",
+		Title: "Розділ 1",
+		Content: map[string]any{
+			"type": "doc",
+			"content": []any{
+				map[string]any{
+					"type": "paragraph",
+					"content": []any{
+						map[string]any{"type": "text", "text": "Твердження"},
+						map[string]any{"type": "footnote", "attrs": map[string]any{"text": "  "}},
+					},
+				},
+			},
+		},
+	}}
+
+	violations := validateForExport(doc, version, sections, nil)
+	if len(violations) != 1 || violations[0].Type != "EMPTY_FOOTNOTE" || violations[0].Subject != "s1" {
+		t.Fatalf("unexpected violations: %+v", violations)
+	}
+}
+
+// Several blank footnotes in one section are one problem to fix, not N.
+func TestValidateForExportReportsEmptyFootnotesOncePerSection(t *testing.T) {
+	doc := &repository.Document{Metadata: map[string]string{}}
+	version := &repository.TemplateVersion{Model: map[string]any{}}
+	blank := map[string]any{"type": "footnote", "attrs": map[string]any{"text": ""}}
+	sections := []repository.Section{{
+		ID:    "s1",
+		Title: "Розділ 1",
+		Content: map[string]any{
+			"type": "doc",
+			"content": []any{
+				map[string]any{
+					"type":    "paragraph",
+					"content": []any{map[string]any{"type": "text", "text": "Текст"}, blank, blank},
+				},
+			},
+		},
+	}}
+
+	violations := validateForExport(doc, version, sections, nil)
+	if len(violations) != 1 {
+		t.Fatalf("expected one violation, got: %+v", violations)
+	}
+}
+
+func TestValidateForExportAllowsFilledFootnote(t *testing.T) {
+	doc := &repository.Document{Metadata: map[string]string{}}
+	version := &repository.TemplateVersion{Model: map[string]any{}}
+	sections := []repository.Section{{
+		ID:    "s1",
+		Title: "Розділ 1",
+		Content: map[string]any{
+			"type": "doc",
+			"content": []any{
+				map[string]any{
+					"type": "paragraph",
+					"content": []any{
+						map[string]any{"type": "text", "text": "Твердження"},
+						map[string]any{"type": "footnote", "attrs": map[string]any{"text": "Джерело"}},
+					},
+				},
+			},
+		},
+	}}
+
+	if violations := validateForExport(doc, version, sections, nil); len(violations) != 0 {
+		t.Fatalf("unexpected violations: %+v", violations)
+	}
+}
+
 func TestValidateForExportBlocksOrphanCrossReference(t *testing.T) {
 	doc := &repository.Document{Metadata: map[string]string{}}
 	version := &repository.TemplateVersion{Model: map[string]any{}}

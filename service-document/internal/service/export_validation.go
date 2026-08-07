@@ -56,6 +56,16 @@ func validateForExport(
 				Description: fmt.Sprintf("формула в розділі «%s» не має вмісту", sec.Title),
 			})
 		}
+
+		// FR-EDT-04: likewise a footnote marker with no note — Word would print
+		// a reference number pointing at nothing.
+		if collectEmptyFootnoteCount(sec.Content) > 0 {
+			violations = append(violations, grpcerr.ExportViolation{
+				Type:        "EMPTY_FOOTNOTE",
+				Subject:     sec.ID,
+				Description: fmt.Sprintf("виноска в розділі «%s» не має тексту", sec.Title),
+			})
+		}
 	}
 
 	// FR-EDT-07: a cross-reference resolves against the live numbering counters,
@@ -125,6 +135,37 @@ func collectEmptyFormulaBlockIDs(node map[string]any) []string {
 	}
 	walk(node)
 	return out
+}
+
+// collectEmptyFootnoteCount counts footnote nodes with no text. Footnotes
+// carry no blockId of their own — they are inline atoms inside a paragraph —
+// so the violation is reported against the section rather than a block.
+func collectEmptyFootnoteCount(node map[string]any) int {
+	count := 0
+	var walk func(n map[string]any)
+	walk = func(n map[string]any) {
+		if n == nil {
+			return
+		}
+		if n["type"] == "footnote" {
+			attrs, _ := n["attrs"].(map[string]any)
+			text, _ := attrs["text"].(string)
+			if strings.TrimSpace(text) == "" {
+				count++
+			}
+		}
+		content, ok := n["content"].([]any)
+		if !ok {
+			return
+		}
+		for _, child := range content {
+			if childMap, ok := child.(map[string]any); ok {
+				walk(childMap)
+			}
+		}
+	}
+	walk(node)
+	return count
 }
 
 // collectCrossReferenceTargets returns the ids cross-reference nodes point at.
