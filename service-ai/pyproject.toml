@@ -15,6 +15,15 @@ dependencies = [
     "shared-py",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.3.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
 [tool.uv.sources]
 shared-py = { path = "../pkg/shared-py", editable = true }
 
